@@ -1,67 +1,11 @@
-/**
- * @file   tm.c
- * @author [...]
- *
- * @section LICENSE
- *
- * [...]
- *
- * @section DESCRIPTION
- *
- * Implementation of your own transaction manager.
- * You can completely rewrite this file (and create more files) as you wish.
- * Only the interface (i.e. exported symbols and semantic) must be preserved.
-**/
-
-// Requested features
 #define _GNU_SOURCE
 #define _POSIX_C_SOURCE   200809L
 #ifdef __STDC_NO_ATOMICS__
     #error Current C11 compiler does not support atomic operations
 #endif
 
-// External headers
-
-// Internal headers
 #include <tm.h>
-
-// -------------------------------------------------------------------------- //
-
-/** Define a proposition as likely true.
- * @param prop Proposition
-**/
-#undef likely
-#ifdef __GNUC__
-    #define likely(prop) \
-        __builtin_expect((prop) ? 1 : 0, 1)
-#else
-    #define likely(prop) \
-        (prop)
-#endif
-
-/** Define a proposition as likely false.
- * @param prop Proposition
-**/
-#undef unlikely
-#ifdef __GNUC__
-    #define unlikely(prop) \
-        __builtin_expect((prop) ? 1 : 0, 0)
-#else
-    #define unlikely(prop) \
-        (prop)
-#endif
-
-/** Define one or several attributes.
- * @param type... Attribute names
-**/
-#undef as
-#ifdef __GNUC__
-    #define as(type...) \
-        __attribute__((type))
-#else
-    #define as(type...)
-    #warning This compiler has no support for GCC attributes
-#endif
+#include "common.h"
 
 // -------------------------------------------------------------------------- //
 
