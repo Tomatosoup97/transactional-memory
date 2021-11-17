@@ -4,8 +4,41 @@
     #error Current C11 compiler does not support atomic operations
 #endif
 
-#include <tm.h>
+#include "tm.h"
+#include <stdlib.h>
 #include "common.h"
+
+#define MAX_SEGMENTS_COUNT 65536
+
+typedef struct {
+    size_t size;            // size of segment
+    void *read;
+    void *write;
+    void *control;          // TODO: control structure;
+} segment_t;
+
+typedef struct {
+    size_t size;
+    size_t align;           // requested alignment
+    size_t align_alloc;     // actual allocation alignment
+    segment_t* segments[MAX_SEGMENTS_COUNT]; // TODO: make it a list
+} region_t;
+
+int allocate_segment(segment_t *segment, size_t align_alloc, size_t size) {
+    // allocate up to X
+
+    if (unlikely(posix_memalign(&(segment->read), align_alloc, size) != 0)) {
+        return 1;
+    }
+
+    if (unlikely(posix_memalign(&(segment->write), align_alloc, size) != 0)) {
+        return 1;
+    }
+    segment->size = size;
+
+    // memset(segment, 0, size);
+    return 0;
+}
 
 // -------------------------------------------------------------------------- //
 
@@ -15,8 +48,22 @@
  * @return Opaque shared memory region handle, 'invalid_shared' on failure
 **/
 shared_t tm_create(size_t size as(unused), size_t align as(unused)) {
-    // TODO: tm_create(size_t, size_t)
-    return invalid_shared;
+    region_t* region = (region_t*) malloc(sizeof(region_t));
+
+    if (unlikely(!region)) {
+        return invalid_shared;
+    }
+
+    size_t align_alloc = align < sizeof(void*) ? sizeof(void*) : align;
+
+    if (unlikely(allocate_segment(region->segments[0], align_alloc, size) != 0)) {
+        return invalid_shared;
+    }
+
+    region->align = align;
+    region->align_alloc = align_alloc;
+
+    return region;
 }
 
 /** Destroy (i.e. clean-up + free) a given shared memory region.
@@ -40,8 +87,7 @@ void* tm_start(shared_t shared as(unused)) {
  * @return First allocated segment size
 **/
 size_t tm_size(shared_t shared as(unused)) {
-    // TODO: tm_size(shared_t)
-    return 0;
+    return ((region_t*) shared)->segments[0]->size;
 }
 
 /** [thread-safe] Return the alignment (in bytes) of the memory accesses on the given shared memory region.
@@ -49,8 +95,7 @@ size_t tm_size(shared_t shared as(unused)) {
  * @return Alignment used globally
 **/
 size_t tm_align(shared_t shared as(unused)) {
-    // TODO: tm_align(shared_t)
-    return 0;
+    return ((region_t*) shared)->align;
 }
 
 /** [thread-safe] Begin a new transaction on the given shared memory region.
