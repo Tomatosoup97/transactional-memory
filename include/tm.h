@@ -20,7 +20,7 @@
  *
  * Interface declaration for the transaction manager to use (C version).
  * YOU SHOULD NOT MODIFY THIS FILE.
-**/
+ **/
 
 #pragma once
 
@@ -30,27 +30,29 @@
 
 // -------------------------------------------------------------------------- //
 
-typedef void* shared_t;
+typedef void *shared_t;
 static shared_t const invalid_shared = NULL; // Invalid shared memory region
 
 typedef uintptr_t tx_t;
-static tx_t const invalid_tx = ~((tx_t) 0); // Invalid transaction constant
+static tx_t const invalid_tx = ~((tx_t)0); // Invalid transaction constant
 
 typedef int alloc_t;
-static alloc_t const success_alloc = 0; // Allocation successful and the TX can continue
-static alloc_t const abort_alloc   = 1; // TX was aborted and could be retried
-static alloc_t const nomem_alloc   = 2; // Memory allocation failed but TX was not aborted
+static alloc_t const success_alloc =
+    0; // Allocation successful and the TX can continue
+static alloc_t const abort_alloc = 1; // TX was aborted and could be retried
+static alloc_t const nomem_alloc =
+    2; // Memory allocation failed but TX was not aborted
 
 // -------------------------------------------------------------------------- //
 
 shared_t tm_create(size_t, size_t);
-void     tm_destroy(shared_t);
-void*    tm_start(shared_t);
-size_t   tm_size(shared_t);
-size_t   tm_align(shared_t);
-tx_t     tm_begin(shared_t, bool);
-bool     tm_end(shared_t, tx_t);
-bool     tm_read(shared_t, tx_t, void const*, size_t, void*);
-bool     tm_write(shared_t, tx_t, void const*, size_t, void*);
-alloc_t  tm_alloc(shared_t, tx_t, size_t, void**);
-bool     tm_free(shared_t, tx_t, void*);
+void tm_destroy(shared_t);
+void *tm_start(shared_t);
+size_t tm_size(shared_t);
+size_t tm_align(shared_t);
+tx_t tm_begin(shared_t, bool);
+bool tm_end(shared_t, tx_t);
+bool tm_read(shared_t, tx_t, void const *, size_t, void *);
+bool tm_write(shared_t, tx_t, void const *, size_t, void *);
+alloc_t tm_alloc(shared_t, tx_t, size_t, void **);
+bool tm_free(shared_t, tx_t, void *);
