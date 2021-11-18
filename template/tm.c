@@ -17,7 +17,7 @@
 #define MAX_SEGMENTS_COUNT 65536
 
 int alloc_segment(segment_t *segment, size_t align, size_t size) {
-  size_t actual_size = next_pow2(size); // TODO: we calculate powe2_exp twice
+  size_t actual_size = next_pow2(size); // TODO: we calculate pow2_exp twice
 
   if (unlikely(posix_memalign(&(segment->read), align, actual_size) != 0)) {
     return 1;
@@ -42,7 +42,7 @@ void free_segment(segment_t *segment) {
   free(segment);
 }
 
-shared_t tm_create(size_t size as(unused), size_t align as(unused)) {
+shared_t tm_create(size_t size, size_t align) {
   region_t *region = (region_t *)malloc(sizeof(region_t));
   batcher_t *batcher = (batcher_t *)malloc(sizeof(batcher_t));
   segment_t *seg = (segment_t *)malloc(sizeof(segment_t));
@@ -68,7 +68,7 @@ shared_t tm_create(size_t size as(unused), size_t align as(unused)) {
   return region;
 }
 
-void tm_destroy(shared_t shared as(unused)) {
+void tm_destroy(shared_t shared) {
   region_t *region = (region_t *)shared;
 
   while (true) {
@@ -93,15 +93,15 @@ void *tm_start(shared_t shared as(unused)) {
   return NULL;
 }
 
-size_t tm_size(shared_t shared as(unused)) {
+size_t tm_size(shared_t shared) {
   return ((region_t *)shared)->seg_links->seg->size;
 }
 
-size_t tm_align(shared_t shared as(unused)) {
+size_t tm_align(shared_t shared) {
   return ((region_t *)shared)->align;
 }
 
-tx_t tm_begin(shared_t shared as(unused), bool is_ro as(unused)) {
+tx_t tm_begin(shared_t shared, bool is_ro) {
   // TODO: rethink
   region_t *region = (region_t *)shared;
   enter_batcher(region->batcher);
@@ -111,7 +111,7 @@ tx_t tm_begin(shared_t shared as(unused), bool is_ro as(unused)) {
   return read_write_tx;
 }
 
-bool tm_end(shared_t shared as(unused), tx_t tx as(unused)) {
+bool tm_end(shared_t shared, tx_t tx as(unused)) {
   // TODO
   region_t *region = (region_t *)shared;
 
@@ -133,8 +133,7 @@ bool tm_write(shared_t shared as(unused), tx_t tx as(unused),
   return false;
 }
 
-alloc_t tm_alloc(shared_t shared as(unused), tx_t tx as(unused),
-                 size_t size as(unused), void **target as(unused)) {
+alloc_t tm_alloc(shared_t shared, tx_t tx, size_t size, void **target) {
 
   region_t *region = (region_t *)shared;
   segment_t *segment = (segment_t *)malloc(sizeof(segment_t));
