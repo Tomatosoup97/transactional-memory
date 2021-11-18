@@ -15,24 +15,18 @@ typedef struct {
   link_t *seg_links;
 } region_t;
 
-// -------------------------------------------------------------------------- //
-
 typedef void *shared_t;
-static shared_t const invalid_shared = NULL; // Invalid shared memory region
+static shared_t const invalid_shared = NULL;
 
 typedef uintptr_t tx_t;
-static tx_t const invalid_tx = ~((tx_t)0); // Invalid transaction constant
+static tx_t const invalid_tx = ~((tx_t)0);
 static const tx_t read_only_tx = UINTPTR_MAX - 10;
 static const tx_t read_write_tx = UINTPTR_MAX - 11;
 
 typedef int alloc_t;
-static alloc_t const success_alloc =
-    0; // Allocation successful and the TX can continue
-static alloc_t const abort_alloc = 1; // TX was aborted and could be retried
-static alloc_t const nomem_alloc =
-    2; // Memory allocation failed but TX was not aborted
-
-// -------------------------------------------------------------------------- //
+static alloc_t const success_alloc = 0;
+static alloc_t const abort_alloc = 1;
+static alloc_t const nomem_alloc = 2;
 
 int alloc_segment(segment_t *segment, size_t align, size_t size);
 void free_segment(segment_t *segment);
