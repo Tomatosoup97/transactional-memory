@@ -1,3 +1,8 @@
+#ifndef _COMMON_H_
+#define _COMMON_H_
+
+#include <stdlib.h>
+
 /* Define a proposition as likely true */
 #undef likely
 #ifdef __GNUC__
@@ -21,4 +26,18 @@
 #else
 #define as(type...)
 #warning This compiler has no support for GCC attributes
+#endif
+
+#define CANARY_ADDR 0xDEADC0DE
+
+#define IS_SEG_VALID(segment) (segment->canary == CANARY_ADDR)
+#define SEG_CANARY_CHECK(segment) assert(IS_SEG_VALID((segment)))
+#define SET_SEG_CANARY(segment) (segment->canary = CANARY_ADDR)
+
+int pow2_exp(size_t x);
+
+size_t pow2(int exp);
+
+size_t next_pow2(size_t x);
+
 #endif

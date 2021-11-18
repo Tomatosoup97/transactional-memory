@@ -5,10 +5,14 @@
 #include <stdatomic.h>
 
 typedef struct {
-  pthread_cond_t waiters;
   atomic_int counter;
   atomic_int remaining;
+  atomic_int blocked;
+  pthread_cond_t waiters;
+  pthread_mutex_t critsec;
 } batcher_t;
+
+void init_batcher(batcher_t *b);
 
 int get_batcher_epoch(batcher_t *b);
 

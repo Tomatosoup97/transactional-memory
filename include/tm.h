@@ -1,32 +1,19 @@
-/**
- * @file   tm.h
- * @author Sébastien ROUAULT <sebastien.rouault@epfl.ch>
- *
- * @section LICENSE
- *
- * Copyright © 2018-2019 Sébastien ROUAULT.
- *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 3 of the License, or
- * any later version. Please see https://gnu.org/licenses/gpl.html
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU General Public License for more details.
- *
- * @section DESCRIPTION
- *
- * Interface declaration for the transaction manager to use (C version).
- * YOU SHOULD NOT MODIFY THIS FILE.
- **/
-
 #pragma once
 
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
+
+#include "batcher.h"
+#include "link.h"
+
+typedef struct {
+  size_t size;
+  size_t align;
+  size_t align_alloc;
+  batcher_t *batcher;
+  link_t *seg_links;
+} region_t;
 
 // -------------------------------------------------------------------------- //
 
@@ -35,6 +22,8 @@ static shared_t const invalid_shared = NULL; // Invalid shared memory region
 
 typedef uintptr_t tx_t;
 static tx_t const invalid_tx = ~((tx_t)0); // Invalid transaction constant
+static const tx_t read_only_tx = UINTPTR_MAX - 10;
+static const tx_t read_write_tx = UINTPTR_MAX - 11;
 
 typedef int alloc_t;
 static alloc_t const success_alloc =
@@ -44,6 +33,11 @@ static alloc_t const nomem_alloc =
     2; // Memory allocation failed but TX was not aborted
 
 // -------------------------------------------------------------------------- //
+
+int alloc_segment(segment_t *segment, size_t align, size_t size);
+void free_segment(segment_t *segment);
+
+// Interface
 
 shared_t tm_create(size_t, size_t);
 void tm_destroy(shared_t);
