@@ -47,3 +47,9 @@ $(BIN): $(OBJS) Makefile
 
 lint:
 	./lint.sh
+
+tests: $(OBJS) Makefile
+	$(CC) $(CCFLAGS) -o $@ $(OBJS) $(LDLIBS)
+
+run_tests: clean lint tests
+	./tests
