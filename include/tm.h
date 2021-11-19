@@ -6,6 +6,7 @@
 
 #include "batcher.h"
 #include "link.h"
+#include "segment.h"
 
 typedef struct {
   size_t size;
@@ -16,11 +17,6 @@ typedef struct {
 
 typedef void *shared_t;
 static shared_t const invalid_shared = NULL;
-
-typedef uintptr_t tx_t;
-static tx_t const invalid_tx = ~((tx_t)0);
-static const tx_t read_only_tx = UINTPTR_MAX - 10;
-static const tx_t read_write_tx = UINTPTR_MAX - 11;
 
 typedef int alloc_t;
 static alloc_t const success_alloc = 0;

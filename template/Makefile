@@ -29,6 +29,7 @@ LDLIBS   :=
 build: $(BIN)
 clean:
 	$(RM) $(OBJS) $(BIN)
+	rm -f tests
 
 define BUILD_C
 %.$(1).o: %.$(1) $$(HDRS_C) Makefile

@@ -18,10 +18,16 @@
 
 #define MAX_SEGMENTS_COUNT 65536
 
+static atomic_int trans_counter = 0;
+
+bool is_tx_readonly(tx_t tx) { return (tx & read_only_tx) > 0; }
+
 int alloc_segment(segment_t **segment, size_t align, size_t size) {
+  size_t words_count = size / align;
   size_t fst_aligned = fst_aligned_offset(align);
-  size_t seg_size = fst_aligned + size * 2; // TODO: + control size
-  size_t alloc = next_pow2(seg_size);       // TODO: we calculate pow2_exp twice
+  size_t control_size = words_count * sizeof(control_t);
+  size_t seg_size = fst_aligned + control_size + size * 2;
+  size_t alloc = next_pow2(seg_size); // TODO: we calculate pow2_exp twice
 
   // TODO: do we actually need to align the memory given to the user?
   // TODO: is it fine to align to the alloc size?
@@ -30,13 +36,17 @@ int alloc_segment(segment_t **segment, size_t align, size_t size) {
     return 1;
   }
 
+  (*segment)->newly_alloc = true;
+  (*segment)->should_free = false;
   (*segment)->size = size;
   (*segment)->pow2_exp = pow2_exp(seg_size);
-  (*segment)->read = (void *)(*segment) + fst_aligned;
-  (*segment)->write = (void *)(*segment) + fst_aligned + size;
+  (*segment)->control = (control_t *)((void *)(*segment) + fst_aligned);
+  (*segment)->read = (void *)((*segment)->control) + control_size;
+  (*segment)->write = (*segment)->read + size;
 
   SET_SEG_CANARY((*segment));
 
+  memset((*segment)->control, 0, control_size);
   memset((*segment)->read, 0, size);
   memset((*segment)->write, 0, size);
   return 0;
@@ -88,8 +98,8 @@ void tm_destroy(shared_t shared) {
 }
 
 void *tm_start(shared_t shared as(unused)) {
-  // TODO: tm_start(shared_t)
-  return NULL;
+  segment_t *seg = ((region_t *)shared)->seg_links->seg;
+  return cons_opaque_ptr_for_seg(seg);
 }
 
 size_t tm_size(shared_t shared) {
@@ -99,13 +109,16 @@ size_t tm_size(shared_t shared) {
 size_t tm_align(shared_t shared) { return ((region_t *)shared)->align; }
 
 tx_t tm_begin(shared_t shared, bool is_ro) {
-  // TODO: rethink
+  int tx_count = atomic_fetch_add(&trans_counter, 1);
+  tx_t tx = tx_count;
+
   region_t *region = (region_t *)shared;
   enter_batcher(region->batcher);
+
   if (is_ro) {
-    return read_only_tx;
+    tx |= read_only_tx;
   }
-  return read_write_tx;
+  return tx;
 }
 
 bool tm_end(shared_t shared, tx_t tx as(unused)) {
@@ -116,11 +129,48 @@ bool tm_end(shared_t shared, tx_t tx as(unused)) {
   return true; // TODO
 }
 
-bool tm_read(shared_t shared as(unused), tx_t tx as(unused),
-             void const *source as(unused), size_t size as(unused),
-             void *target as(unused)) {
-  // TODO: tm_read(shared_t, tx_t, void const*, size_t, void*)
-  return false;
+bool read_word(tx_t tx, segment_t *seg, size_t align, void const *source,
+               void *target, uint64_t offset) {
+  uint64_t word_count = offset / align;
+
+  // TODO: this is not atomic!
+  if (seg->control[word_count].written) {
+    if (seg->control[word_count].access == tx) {
+      memcpy(target + offset, source + offset, align);
+      return true;
+    } else {
+      return false;
+    }
+  } else {
+    // TODO
+    memcpy(target + offset, source + offset, align);
+    if (!CAS(&seg->control[word_count].access, 0, tx)) {
+      return false; // someone was faster
+    }
+    return true;
+  }
+}
+
+bool tm_read(shared_t shared, tx_t tx, void const *source, size_t size,
+             void *target) {
+  region_t *region = (region_t *)shared;
+  segment_t *seg = (segment_t *)get_opaque_ptr_seg((void *)source);
+
+  void *src_ptr = get_opaque_ptr_word((void *)source);
+
+  if (is_tx_readonly(tx)) {
+    memcpy(target, src_ptr, size);
+    return true;
+  } else {
+    uint64_t offset = 0;
+    while (offset < size) {
+      if (!read_word(tx, seg, region->align, source, target, offset)) {
+        return false;
+      }
+      offset += region->align;
+    }
+    return true;
+  }
 }
 
 bool tm_write(shared_t shared as(unused), tx_t tx as(unused),
@@ -130,7 +180,8 @@ bool tm_write(shared_t shared as(unused), tx_t tx as(unused),
   return false;
 }
 
-alloc_t tm_alloc(shared_t shared, tx_t tx, size_t size, void **target) {
+alloc_t tm_alloc(shared_t shared, tx_t tx as(unused), size_t size,
+                 void **target) {
   region_t *region = (region_t *)shared;
   segment_t *segment = NULL;
 
@@ -139,20 +190,13 @@ alloc_t tm_alloc(shared_t shared, tx_t tx, size_t size, void **target) {
   }
 
   link_insert(region->seg_links, segment);
-
-  // TODO: nooot exactly (?)
-  if (tx == read_only_tx) {
-    *target = segment->read;
-  } else if (tx == read_write_tx) {
-    *target = segment->write;
-  }
-
-  cons_opaque_ptr(segment->pow2_exp, target);
+  *target = cons_opaque_ptr_for_seg(segment);
   return success_alloc;
 }
 
 bool tm_free(shared_t shared as(unused), tx_t tx as(unused),
              void *target as(unused)) {
-  // TODO: tm_free(shared_t, tx_t, void*)
-  return false;
+  segment_t *seg = (segment_t *)get_opaque_ptr_seg(target);
+  seg->should_free = true;
+  return true;
 }

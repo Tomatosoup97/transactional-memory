@@ -25,3 +25,9 @@ size_t fst_aligned_offset(size_t align) {
   size_t is_multiple = sizeof(segment_t) % align == 0 ? 0 : 1;
   return ratio * align + align * is_multiple;
 }
+
+void *cons_opaque_ptr_for_seg(segment_t *seg) {
+  void *ptr = seg->read;
+  cons_opaque_ptr(seg->pow2_exp, &ptr);
+  return ptr;
+}

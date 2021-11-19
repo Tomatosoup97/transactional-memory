@@ -112,12 +112,14 @@ MU_TEST(test_batcher_one_thread) {
 }
 
 MU_TEST(test_mem_region) {
-  shared_t region_p = tm_create(120, 8);
+  shared_t region_p = tm_create(120, 32);
   region_t *region = ((region_t *)region_p);
   {
     mu_check(IS_SEG_VALID(region->seg_links->seg));
     mu_check(tm_size(region_p) == 120);
-    mu_check(tm_align(region_p) == 8);
+    mu_check(tm_align(region_p) == 32);
+
+    mu_check(get_opaque_ptr_seg(tm_start(region_p)) == region->seg_links->seg);
   }
   tm_destroy(region);
 }
