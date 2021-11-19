@@ -5,6 +5,7 @@
 #endif
 
 #include <assert.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -12,59 +13,57 @@
 #include "batcher.h"
 #include "common.h"
 #include "link.h"
+#include "segment.h"
 #include "tm.h"
 
 #define MAX_SEGMENTS_COUNT 65536
 
-int alloc_segment(segment_t *segment, size_t align, size_t size) {
-  size_t actual_size = next_pow2(size); // TODO: we calculate pow2_exp twice
+int alloc_segment(segment_t **segment, size_t align, size_t size) {
+  size_t fst_aligned = fst_aligned_offset(align);
+  size_t seg_size = fst_aligned + size * 2; // TODO: + control size
+  size_t alloc = next_pow2(seg_size);       // TODO: we calculate pow2_exp twice
 
-  if (unlikely(posix_memalign(&(segment->read), align, actual_size) != 0)) {
+  // TODO: do we actually need to align the memory given to the user?
+  // TODO: is it fine to align to the alloc size?
+
+  if (unlikely(posix_memalign((void **)segment, alloc, alloc) != 0)) {
     return 1;
   }
 
-  if (unlikely(posix_memalign(&(segment->write), align, actual_size) != 0)) {
-    return 1;
-  }
+  (*segment)->size = size;
+  (*segment)->pow2_exp = pow2_exp(seg_size);
+  (*segment)->read = (void *)(*segment) + fst_aligned;
+  (*segment)->write = (void *)(*segment) + fst_aligned + size;
 
-  segment->size = size;
-  segment->pow2_exp = pow2_exp(size);
-  SET_SEG_CANARY(segment);
+  SET_SEG_CANARY((*segment));
 
-  memset(segment->read, 0, actual_size);
-  memset(segment->write, 0, actual_size);
+  memset((*segment)->read, 0, size);
+  memset((*segment)->write, 0, size);
   return 0;
 }
 
-void free_segment(segment_t *segment) {
-  free(segment->read);
-  free(segment->write);
-  free(segment);
-}
+void free_segment(segment_t *segment) { free(segment); }
 
 shared_t tm_create(size_t size, size_t align) {
   region_t *region = (region_t *)malloc(sizeof(region_t));
   batcher_t *batcher = (batcher_t *)malloc(sizeof(batcher_t));
-  segment_t *seg = (segment_t *)malloc(sizeof(segment_t));
   region->seg_links = (link_t *)malloc(sizeof(link_t));
+  segment_t *seg = NULL;
 
   init_batcher(batcher);
-  link_init(region->seg_links, seg);
 
   if (unlikely(!region)) {
     return invalid_shared;
   }
 
-  size_t align_alloc = align < sizeof(void *) ? sizeof(void *) : align;
-
-  if (unlikely(alloc_segment(seg, align_alloc, size) != 0)) {
+  if (unlikely(alloc_segment(&seg, align, size) != 0)) {
     return invalid_shared;
   }
 
+  link_init(region->seg_links, seg);
+
   region->batcher = batcher;
   region->align = align;
-  region->align_alloc = align_alloc;
-
   return region;
 }
 
@@ -97,9 +96,7 @@ size_t tm_size(shared_t shared) {
   return ((region_t *)shared)->seg_links->seg->size;
 }
 
-size_t tm_align(shared_t shared) {
-  return ((region_t *)shared)->align;
-}
+size_t tm_align(shared_t shared) { return ((region_t *)shared)->align; }
 
 tx_t tm_begin(shared_t shared, bool is_ro) {
   // TODO: rethink
@@ -134,15 +131,14 @@ bool tm_write(shared_t shared as(unused), tx_t tx as(unused),
 }
 
 alloc_t tm_alloc(shared_t shared, tx_t tx, size_t size, void **target) {
-
   region_t *region = (region_t *)shared;
-  segment_t *segment = (segment_t *)malloc(sizeof(segment_t));
+  segment_t *segment = NULL;
 
-  if (unlikely(alloc_segment(segment, region->align_alloc, size) != 0)) {
+  if (unlikely(alloc_segment(&segment, region->align, size) != 0)) {
     return nomem_alloc;
   }
 
-  link_insert(segment, region->seg_links);
+  link_insert(region->seg_links, segment);
 
   // TODO: nooot exactly (?)
   if (tx == read_only_tx) {
@@ -150,6 +146,8 @@ alloc_t tm_alloc(shared_t shared, tx_t tx, size_t size, void **target) {
   } else if (tx == read_write_tx) {
     *target = segment->write;
   }
+
+  cons_opaque_ptr(segment->pow2_exp, target);
   return success_alloc;
 }
 

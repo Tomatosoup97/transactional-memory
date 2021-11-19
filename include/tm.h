@@ -10,7 +10,6 @@
 typedef struct {
   size_t size;
   size_t align;
-  size_t align_alloc;
   batcher_t *batcher;
   link_t *seg_links;
 } region_t;
@@ -28,7 +27,7 @@ static alloc_t const success_alloc = 0;
 static alloc_t const abort_alloc = 1;
 static alloc_t const nomem_alloc = 2;
 
-int alloc_segment(segment_t *segment, size_t align, size_t size);
+int alloc_segment(segment_t **segment, size_t align, size_t size);
 void free_segment(segment_t *segment);
 
 // Interface

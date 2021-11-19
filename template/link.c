@@ -3,6 +3,7 @@
 #include <stdlib.h>
 
 #include "link.h"
+#include "segment.h"
 
 pthread_mutex_t link_lock = PTHREAD_MUTEX_INITIALIZER;
 
@@ -18,7 +19,7 @@ void link_init(link_t *link, segment_t *seg) {
   pthread_mutex_unlock(&link_lock);
 }
 
-void link_insert(segment_t *seg, link_t *base) {
+void link_insert(link_t *base, segment_t *seg) {
   link_t *link = (link_t *)malloc(sizeof(link_t));
   link->seg = seg;
 

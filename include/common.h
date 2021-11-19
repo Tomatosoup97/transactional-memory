@@ -34,6 +34,8 @@
 #define SEG_CANARY_CHECK(segment) assert(IS_SEG_VALID((segment)))
 #define SET_SEG_CANARY(segment) (segment->canary = CANARY_ADDR)
 
+#define CAS __sync_bool_compare_and_swap
+
 int pow2_exp(size_t x);
 
 size_t pow2(int exp);
