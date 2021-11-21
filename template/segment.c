@@ -1,4 +1,5 @@
 #include <stdint.h>
+#include <stdio.h>
 
 #include "segment.h"
 
@@ -11,6 +12,12 @@ void *get_opaque_ptr_word(void *ptr) {
   uint64_t word_ptr = (uint64_t)ptr & clear_exp;
   return (void *)word_ptr;
 }
+
+size_t get_opaque_ptr_word_offset(void *ptr) {
+  void *word = get_opaque_ptr_word(ptr);
+  segment_t *seg = (segment_t *)get_opaque_ptr_seg(ptr);
+  return word - seg->read;
+};
 
 void *get_opaque_ptr_seg(void *ptr) {
   size_t exp = (size_t)(uint64_t)ptr >> 48;

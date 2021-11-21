@@ -97,7 +97,7 @@ void tm_destroy(shared_t shared) {
   free(region);
 }
 
-void *tm_start(shared_t shared as(unused)) {
+void *tm_start(shared_t shared) {
   segment_t *seg = ((region_t *)shared)->seg_links->seg;
   return cons_opaque_ptr_for_seg(seg);
 }
@@ -133,7 +133,7 @@ bool read_word(tx_t tx, segment_t *seg, size_t align, void const *source,
                void *target, uint64_t offset) {
   uint64_t word_count = offset / align;
 
-  // TODO: this is not atomic!
+  // TODO: make sure that it's atomic w.r.t to write_word
   if (seg->control[word_count].written) {
     if (seg->control[word_count].access == tx) {
       memcpy(target + offset, source + offset, align);
@@ -142,10 +142,11 @@ bool read_word(tx_t tx, segment_t *seg, size_t align, void const *source,
       return false;
     }
   } else {
-    // TODO
     memcpy(target + offset, source + offset, align);
-    if (!CAS(&seg->control[word_count].access, 0, tx)) {
-      return false; // someone was faster
+    CAS(&seg->control[word_count].access, 0, tx);
+
+    if (!(seg->control[word_count].access == tx)) {
+      seg->control[word_count].many_accesses = true;
     }
     return true;
   }
@@ -155,16 +156,16 @@ bool tm_read(shared_t shared, tx_t tx, void const *source, size_t size,
              void *target) {
   region_t *region = (region_t *)shared;
   segment_t *seg = (segment_t *)get_opaque_ptr_seg((void *)source);
-
-  void *src_ptr = get_opaque_ptr_word((void *)source);
+  size_t read_offset = get_opaque_ptr_word_offset((void *)source);
 
   if (is_tx_readonly(tx)) {
-    memcpy(target, src_ptr, size);
+    memcpy(target, seg->read + read_offset, size);
     return true;
   } else {
     uint64_t offset = 0;
     while (offset < size) {
-      if (!read_word(tx, seg, region->align, source, target, offset)) {
+      if (!read_word(tx, seg, region->align, seg->write + read_offset, target,
+                     offset)) {
         return false;
       }
       offset += region->align;

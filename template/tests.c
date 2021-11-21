@@ -18,6 +18,56 @@ void test_teardown(void) {
   // Do nothing
 }
 
+MU_TEST(test_tm_read) {
+  size_t align = 4;
+
+  shared_t region_p = tm_create(align * 4, align);
+  region_t *region = ((region_t *)region_p);
+  {
+    const size_t size = 13;
+    char source[size];
+    void *mem = tm_start(region);
+    bool success;
+
+    strcpy(source, "Hello memory");
+    memcpy(region->seg_links->seg->read, source, size);
+    memcpy(region->seg_links->seg->write, source, size);
+
+    tx_t tx1 = tm_begin(region, false);
+    {
+      char target[size];
+      success = tm_read(region, tx1, mem, size, target);
+
+      mu_check(success);
+      mu_check(strncmp(target, "Hello memory", size) == 0);
+
+      char target2[size];
+      mu_check(tm_read(region, tx1, mem, 8, target2));
+      mu_check(strncmp(target2, "Hello me", 8) == 0);
+
+      mem += 8;
+
+      char target3[size];
+      mu_check(tm_read(region, tx1, mem, 4, target3));
+      mu_check(strncmp(target3, "mory", 4) == 0);
+    }
+    tm_end(region, tx1);
+
+    tx_t tx2 = tm_begin(region, true);
+    {
+      mem -= 4;
+
+      char target[size];
+      mu_check(tm_read(region, tx2, mem, size, target));
+      mu_check(strncmp(target, "o memory", size) == 0);
+    }
+    tm_end(region, tx2);
+
+    // TODO: test transaction numbers
+  }
+  tm_destroy(region);
+}
+
 MU_TEST(test_opaque_ptr_arith) {
   // Test cons_opaque ptr
   void *ptr = (void *)0x00000deadbeef;
@@ -171,6 +221,7 @@ MU_TEST_SUITE(test_suite) {
   MU_RUN_TEST(test_transaction);
   MU_RUN_TEST(test_opaque_ptr_arith);
   MU_RUN_TEST(test_tm_alloc_opaque_ptr);
+  MU_RUN_TEST(test_tm_read);
 }
 
 int main() {

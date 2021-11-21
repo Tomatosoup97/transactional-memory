@@ -1,6 +1,7 @@
 #ifndef _SEGMENT_H_
 #define _SEGMENT_H_
 
+#include <stdatomic.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdlib.h>
@@ -12,6 +13,7 @@ static const tx_t read_only_tx = (UINTPTR_MAX >> 1) + 1;
 typedef struct {
   tx_t access;
   bool written;
+  atomic_bool many_accesses;
 } control_t;
 
 typedef struct {
@@ -30,6 +32,8 @@ void cons_opaque_ptr(size_t exp, void **ptr);
 void *get_opaque_ptr_seg(void *ptr);
 
 void *get_opaque_ptr_word(void *ptr);
+
+size_t get_opaque_ptr_word_offset(void *ptr);
 
 void *cons_opaque_ptr_for_seg(segment_t *seg);
 
