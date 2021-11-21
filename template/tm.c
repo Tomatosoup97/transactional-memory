@@ -130,8 +130,7 @@ bool tm_end(shared_t shared, tx_t tx as(unused)) {
 }
 
 bool read_word(tx_t tx, segment_t *seg, size_t align, void const *source,
-               void *target, uint64_t offset) {
-  uint64_t word_count = offset / align;
+               void *target, uint64_t offset, uint64_t word_count) {
 
   // TODO: make sure that it's atomic w.r.t to write_word
   if (seg->control[word_count].written) {
@@ -157,6 +156,7 @@ bool tm_read(shared_t shared, tx_t tx, void const *source, size_t size,
   region_t *region = (region_t *)shared;
   segment_t *seg = (segment_t *)get_opaque_ptr_seg((void *)source);
   size_t read_offset = get_opaque_ptr_word_offset((void *)source);
+  uint64_t word_count = read_offset / region->align;
 
   if (is_tx_readonly(tx)) {
     memcpy(target, seg->read + read_offset, size);
@@ -165,10 +165,11 @@ bool tm_read(shared_t shared, tx_t tx, void const *source, size_t size,
     uint64_t offset = 0;
     while (offset < size) {
       if (!read_word(tx, seg, region->align, seg->write + read_offset, target,
-                     offset)) {
+                     offset, word_count)) {
         return false;
       }
       offset += region->align;
+      word_count++;
     }
     return true;
   }
