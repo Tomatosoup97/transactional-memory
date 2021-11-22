@@ -106,7 +106,7 @@ struct link {
 /** Link reset.
  * @param link Link to reset
 **/
-static void link_reset(struct link* link) {
+static void link_ref_reset(struct link* link) {
     link->prev = link;
     link->next = link;
 }
@@ -115,7 +115,7 @@ static void link_reset(struct link* link) {
  * @param link Link to insert
  * @param base Base link relative to which 'link' will be inserted
 **/
-static void link_insert(struct link* link, struct link* base) {
+static void link_ref_insert(struct link* link, struct link* base) {
     struct link* prev = base->prev;
     link->prev = prev;
     link->next = base;
@@ -126,7 +126,7 @@ static void link_insert(struct link* link, struct link* base) {
 /** Link removal.
  * @param link Link to remove
 **/
-static void link_remove(struct link* link) {
+static void link_ref_remove(struct link* link) {
     struct link* prev = link->prev;
     struct link* next = link->next;
     prev->next = next;
@@ -346,7 +346,7 @@ static void lock_release_shared(struct lock_t* lock) {
 
 // -------------------------------------------------------------------------- //
 
-static const tx_t read_only_tx  = UINTPTR_MAX - 10;
+static const tx_t read_only_ref_tx  = UINTPTR_MAX - 10;
 static const tx_t read_write_tx = UINTPTR_MAX - 11;
 
 struct region {
@@ -375,7 +375,7 @@ shared_t tm_create(size_t size, size_t align) {
         return invalid_shared;
     }
     memset(region->start, 0, size);
-    link_reset(&(region->allocs));
+    link_ref_reset(&(region->allocs));
     region->size        = size;
     region->align       = align;
     region->align_alloc = align_alloc;
@@ -390,7 +390,7 @@ void tm_destroy(shared_t shared) {
         struct link* alloc = allocs->next;
         if (alloc == allocs)
             break;
-        link_remove(alloc);
+        link_ref_remove(alloc);
         free(alloc);
     }
     free(region->start);
@@ -414,7 +414,7 @@ tx_t tm_begin(shared_t shared, bool is_ro) {
     if (is_ro) {
         if (unlikely(!lock_acquire_shared(&(((struct region*) shared)->lock))))
             return invalid_tx;
-        return read_only_tx;
+        return read_only_ref_tx;
     } else {
         if (unlikely(!lock_acquire(&(((struct region*) shared)->lock))))
             return invalid_tx;
@@ -423,7 +423,7 @@ tx_t tm_begin(shared_t shared, bool is_ro) {
 }
 
 bool tm_end(shared_t shared, tx_t tx) {
-    if (tx == read_only_tx) {
+    if (tx == read_only_ref_tx) {
         lock_release_shared(&(((struct region*) shared)->lock));
     } else {
         lock_release(&(((struct region*) shared)->lock));
@@ -447,7 +447,7 @@ alloc_t tm_alloc(shared_t shared, tx_t tx as(unused), size_t size, void** target
     void* segment;
     if (unlikely(posix_memalign(&segment, align_alloc, delta_alloc + size) != 0)) // Allocation failed
         return nomem_alloc;
-    link_insert((struct link*) segment, &(((struct region*) shared)->allocs));
+    link_ref_insert((struct link*) segment, &(((struct region*) shared)->allocs));
     segment = (void*) ((uintptr_t) segment + delta_alloc);
     memset(segment, 0, size);
     *target = segment;
@@ -457,7 +457,7 @@ alloc_t tm_alloc(shared_t shared, tx_t tx as(unused), size_t size, void** target
 bool tm_free(shared_t shared, tx_t tx as(unused), void* segment) {
     size_t delta_alloc = ((struct region*) shared)->delta_alloc;
     segment = (void*) ((uintptr_t) segment - delta_alloc);
-    link_remove((struct link*) segment);
+    link_ref_remove((struct link*) segment);
     free(segment);
     return true;
 }

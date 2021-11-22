@@ -117,7 +117,6 @@ tx_t tm_begin(shared_t shared, bool is_ro) {
 }
 
 bool tm_end(shared_t shared, tx_t tx as(unused)) {
-  // TODO
   region_t *region = (region_t *)shared;
 
   leave_batcher(region->batcher);
@@ -194,9 +193,8 @@ bool write_word(tx_t tx, segment_t *seg, size_t align, void const *source,
   }
 }
 
-bool tm_write(shared_t shared as(unused), tx_t tx as(unused),
-              void const *source as(unused), size_t size as(unused),
-              void *target as(unused)) {
+bool tm_write(shared_t shared, tx_t tx, void const *source, size_t size,
+              void *target) {
   region_t *region = (region_t *)shared;
   segment_t *seg = (segment_t *)get_opaque_ptr_seg((void *)target);
   size_t write_offset = get_opaque_ptr_word_offset((void *)target);
@@ -228,8 +226,7 @@ alloc_t tm_alloc(shared_t shared, tx_t tx as(unused), size_t size,
   return success_alloc;
 }
 
-bool tm_free(shared_t shared as(unused), tx_t tx as(unused),
-             void *target as(unused)) {
+bool tm_free(shared_t shared as(unused), tx_t tx as(unused), void *target) {
   segment_t *seg = (segment_t *)get_opaque_ptr_seg(target);
   seg->should_free = true;
   return true;
