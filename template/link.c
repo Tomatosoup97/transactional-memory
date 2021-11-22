@@ -1,7 +1,8 @@
 #include <pthread.h>
-
+#include <stdio.h>
 #include <stdlib.h>
 
+#include "common.h"
 #include "link.h"
 #include "segment.h"
 
@@ -20,6 +21,8 @@ void link_init(link_t *link, segment_t *seg) {
 }
 
 void link_insert(link_t *base, segment_t *seg) {
+  if (DEBUG)
+    printf("Inserting link\n");
   link_t *link = (link_t *)malloc(sizeof(link_t));
   link->seg = seg;
 
@@ -35,6 +38,8 @@ void link_insert(link_t *base, segment_t *seg) {
 }
 
 void link_remove(link_t *link) {
+  if (DEBUG)
+    printf("Removing link\n");
   pthread_mutex_lock(&link_lock);
   {
     link_t *prev = link->prev;

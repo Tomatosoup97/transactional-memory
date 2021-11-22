@@ -3,6 +3,8 @@
 
 #include <stdlib.h>
 
+#define DEBUG 1
+
 /* Define a proposition as likely true */
 #undef likely
 #ifdef __GNUC__

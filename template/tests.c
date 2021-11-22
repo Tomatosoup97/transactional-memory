@@ -1,9 +1,11 @@
 #include <assert.h>
 #include <errno.h>
 #include <limits.h>
+#include <pthread.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <sys/mman.h>
+#include <unistd.h>
 
 #include "common.h"
 #include "minunit.h"
@@ -34,7 +36,6 @@ MU_TEST(test_tm_read_write) {
     memcpy(region->seg_links->seg->write, source, size);
 
     tx_t tx1 = tm_begin(region, false);
-    tx_t tx2 = tm_begin(region, false);
     {
       // Test read in read-write memory
       char target[size];
@@ -66,19 +67,22 @@ MU_TEST(test_tm_read_write) {
       mu_check(tm_read(region, tx1, mem, 16, target));
       mu_check(strncmp(target, "Guy Reifi iscool", 16) == 0);
     }
+    tm_end(region, tx1);
+    tx_t tx2 = tm_begin(region, false);
     {
       // Test overwrite fails in read-write memory
-      char target[16];
       mu_check(!tm_write(region, tx2, "Fieri is notcool", 16, mem));
+    }
+    tm_end(region, tx2);
 
+    {
+      // Test failed write is not reflected
+      char target[16];
       mu_check(tm_read(region, tx1, mem, 16, target));
       mu_check(strncmp(target, "Guy Reifi iscool", 16) == 0);
     }
-    tm_end(region, tx1);
-    tm_end(region, tx2);
 
     tx_t tx1_ro = tm_begin(region, true);
-    tx_t tx2_ro = tm_begin(region, true);
     {
       // Test read in read-only memory
       mem = tm_start(region) + 4;
@@ -86,11 +90,16 @@ MU_TEST(test_tm_read_write) {
       char target[size];
       mu_check(tm_read(region, tx1_ro, mem, size, target));
       mu_check(strncmp(target, "o memory", size) == 0);
+    }
 
+    tm_end(region, tx1_ro);
+
+    tx_t tx2_ro = tm_begin(region, true);
+    {
+      char target[size];
       mu_check(tm_read(region, tx2_ro, mem - 4, size, target));
       mu_check(strncmp(target, "Hello memory", size) == 0);
     }
-    tm_end(region, tx1_ro);
     tm_end(region, tx2_ro);
 
     {
@@ -184,18 +193,76 @@ MU_TEST(test_allocate_segment) {
 }
 
 MU_TEST(test_batcher_one_thread) {
-  batcher_t *b = (batcher_t *)malloc(sizeof(batcher_t));
-  init_batcher(b);
+  shared_t region_p = tm_create(32, 1);
+  region_t *region = ((region_t *)region_p);
+  batcher_t *b = region->batcher;
 
   enter_batcher(b);
   {
     mu_check(get_batcher_epoch(b) == 0);
     mu_check(b->remaining == 1);
   }
-  leave_batcher(b);
+  leave_batcher(region);
 
   mu_check(get_batcher_epoch(b) == 1);
   mu_check(b->remaining == 0);
+
+  tm_destroy(region);
+}
+
+#define thread_count 4
+
+typedef struct {
+  region_t *r;
+  volatile bool stay;
+} batcher_run_args_t;
+
+void *batcher_runner(void *p) {
+  batcher_run_args_t *args = (batcher_run_args_t *)p;
+
+  enter_batcher(args->r->batcher);
+  while (args->stay) {
+    // spin
+  }
+  leave_batcher(args->r);
+  return NULL;
+}
+
+MU_TEST(test_batcher_multi_thread) {
+  shared_t region_p = tm_create(32, 1);
+  region_t *region = ((region_t *)region_p);
+  batcher_t *b = region->batcher;
+
+  pthread_t threads[thread_count];
+  batcher_run_args_t args[thread_count];
+
+  for (int i = 0; i < thread_count; i++) {
+    args[i].stay = true;
+    args[i].r = region;
+    pthread_create(&(threads[i]), NULL, batcher_runner, &args[i]);
+  }
+
+  sleep(0.5);
+
+  {
+    mu_check(get_batcher_epoch(b) == 0);
+    mu_check(b->remaining == 1);
+    mu_check(b->blocked == 3);
+  }
+
+  for (int i = 0; i < thread_count; i++) {
+    args[i].stay = false;
+  }
+
+  for (int i = 0; i < thread_count; i++) {
+    pthread_join(threads[i], NULL);
+  }
+
+  sleep(0.5);
+
+  mu_check(get_batcher_epoch(b) == 2);
+  mu_check(b->remaining == 0);
+  mu_check(b->blocked == 0);
 }
 
 MU_TEST(test_mem_region) {
@@ -208,6 +275,7 @@ MU_TEST(test_mem_region) {
 
     mu_check(get_opaque_ptr_seg(tm_start(region_p)) == region->seg_links->seg);
   }
+  /* shared_t region_p = tm_create(align * 32, align); */
   tm_destroy(region);
 }
 
@@ -253,12 +321,13 @@ MU_TEST(test_pow_funcs) {
 MU_TEST_SUITE(test_suite) {
   MU_RUN_TEST(test_pow_funcs);
   MU_RUN_TEST(test_allocate_segment);
-  MU_RUN_TEST(test_batcher_one_thread);
   MU_RUN_TEST(test_mem_region);
   MU_RUN_TEST(test_transaction);
   MU_RUN_TEST(test_opaque_ptr_arith);
   MU_RUN_TEST(test_tm_alloc_opaque_ptr);
   MU_RUN_TEST(test_tm_read_write);
+  MU_RUN_TEST(test_batcher_one_thread);
+  MU_RUN_TEST(test_batcher_multi_thread);
 }
 
 int main() {

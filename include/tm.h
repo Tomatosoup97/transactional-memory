@@ -8,7 +8,7 @@
 #include "link.h"
 #include "segment.h"
 
-typedef struct {
+typedef struct region_s {
   size_t size;
   size_t align;
   batcher_t *batcher;

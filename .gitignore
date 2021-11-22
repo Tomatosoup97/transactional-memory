@@ -5,6 +5,7 @@ target/
 tests
 yqAHxv*
 grading/grading
+grade.sh
 
 ### C ###
 # Prerequisites

@@ -21,6 +21,8 @@
 static atomic_int trans_counter = 0;
 
 int alloc_segment(segment_t **segment, size_t align, size_t size) {
+  if (DEBUG)
+    printf("Allocating segment\n");
   size_t words_count = size / align;
   size_t fst_aligned = fst_aligned_offset(align);
   size_t control_size = words_count * sizeof(control_t);
@@ -50,6 +52,8 @@ int alloc_segment(segment_t **segment, size_t align, size_t size) {
 void free_segment(segment_t *segment) { free(segment); }
 
 shared_t tm_create(size_t size, size_t align) {
+  if (DEBUG)
+    printf("TM create, size: %ld, align: %ld\n", size, align);
   region_t *region = (region_t *)malloc(sizeof(region_t));
   batcher_t *batcher = (batcher_t *)malloc(sizeof(batcher_t));
   region->seg_links = (link_t *)malloc(sizeof(link_t));
@@ -73,6 +77,8 @@ shared_t tm_create(size_t size, size_t align) {
 }
 
 void tm_destroy(shared_t shared) {
+  if (DEBUG)
+    printf("TM destroy\n");
   region_t *region = (region_t *)shared;
 
   while (true) {
@@ -108,18 +114,26 @@ tx_t tm_begin(shared_t shared, bool is_ro) {
   tx_t tx = tx_count;
 
   region_t *region = (region_t *)shared;
-  enter_batcher(region->batcher);
 
   if (is_ro) {
     tx |= read_only_tx;
   }
+  if (DEBUG)
+    printf("[%lx] TM begin\n", tx);
+
+  enter_batcher(region->batcher);
   return tx;
 }
 
 bool tm_end(shared_t shared, tx_t tx as(unused)) {
+  if (DEBUG)
+    printf("[%lx] TM end\n", tx);
   region_t *region = (region_t *)shared;
 
-  leave_batcher(region->batcher);
+  // TODO: mark things for committing here
+  // i.e. alloc and free segments, exec writes
+
+  leave_batcher(region);
   return true; // TODO
 }
 
@@ -147,6 +161,8 @@ bool read_word(tx_t tx, segment_t *seg, size_t align, void const *source,
 
 bool tm_read(shared_t shared, tx_t tx, void const *source, size_t size,
              void *target) {
+  if (DEBUG)
+    printf("[%lx] TM read\n", tx);
   region_t *region = (region_t *)shared;
   segment_t *seg = (segment_t *)get_opaque_ptr_seg((void *)source);
   size_t read_offset = get_opaque_ptr_word_offset((void *)source);
@@ -193,8 +209,8 @@ bool write_word(tx_t tx, segment_t *seg, size_t align, void const *source,
   }
 }
 
-bool tm_write(shared_t shared, tx_t tx, void const *source, size_t size,
-              void *target) {
+bool _tm_write(shared_t shared, tx_t tx, void const *source, size_t size,
+               void *target) {
   region_t *region = (region_t *)shared;
   segment_t *seg = (segment_t *)get_opaque_ptr_seg((void *)target);
   size_t write_offset = get_opaque_ptr_word_offset((void *)target);
@@ -212,8 +228,20 @@ bool tm_write(shared_t shared, tx_t tx, void const *source, size_t size,
   return true;
 }
 
+bool tm_write(shared_t shared, tx_t tx, void const *source, size_t size,
+              void *target) {
+  if (DEBUG)
+    printf("[%lx] TM writing \n", tx);
+  bool res = _tm_write(shared, tx, source, size, target);
+  if (DEBUG)
+    printf("[%lx] TM write - %s\n", tx, res ? "success" : "failure");
+  return res;
+}
+
 alloc_t tm_alloc(shared_t shared, tx_t tx as(unused), size_t size,
                  void **target) {
+  if (DEBUG)
+    printf("[%lx] TM alloc\n", tx);
   region_t *region = (region_t *)shared;
   segment_t *segment = NULL;
 
@@ -227,6 +255,8 @@ alloc_t tm_alloc(shared_t shared, tx_t tx as(unused), size_t size,
 }
 
 bool tm_free(shared_t shared as(unused), tx_t tx as(unused), void *target) {
+  if (DEBUG)
+    printf("[%lx] TM free\n", tx);
   segment_t *seg = (segment_t *)get_opaque_ptr_seg(target);
   seg->should_free = true;
   return true;

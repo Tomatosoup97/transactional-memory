@@ -4,6 +4,8 @@
 #include <pthread.h>
 #include <stdatomic.h>
 
+struct region_s;
+
 typedef struct {
   atomic_int counter;
   atomic_int remaining;
@@ -18,6 +20,6 @@ int get_batcher_epoch(batcher_t *b);
 
 void enter_batcher(batcher_t *b);
 
-void leave_batcher(batcher_t *b);
+void leave_batcher(struct region_s *region);
 
 #endif
