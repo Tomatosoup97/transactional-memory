@@ -10,6 +10,8 @@ typedef uintptr_t tx_t;
 static tx_t const invalid_tx = ~((tx_t)0);
 static const tx_t read_only_tx = (UINTPTR_MAX >> 1) + 1;
 
+bool is_tx_readonly(tx_t tx);
+
 typedef struct {
   tx_t access;
   bool written;

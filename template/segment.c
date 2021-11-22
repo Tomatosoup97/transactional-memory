@@ -3,6 +3,8 @@
 
 #include "segment.h"
 
+bool is_tx_readonly(tx_t tx) { return (tx & read_only_tx) > 0; }
+
 void cons_opaque_ptr(size_t exp, void **ptr) {
   *ptr = (void *)((uint64_t)(*ptr) | exp << 48);
 }

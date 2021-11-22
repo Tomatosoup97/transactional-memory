@@ -18,10 +18,10 @@ void test_teardown(void) {
   // Do nothing
 }
 
-MU_TEST(test_tm_read) {
+MU_TEST(test_tm_read_write) {
   size_t align = 4;
 
-  shared_t region_p = tm_create(align * 4, align);
+  shared_t region_p = tm_create(align * 32, align);
   region_t *region = ((region_t *)region_p);
   {
     const size_t size = 13;
@@ -34,7 +34,9 @@ MU_TEST(test_tm_read) {
     memcpy(region->seg_links->seg->write, source, size);
 
     tx_t tx1 = tm_begin(region, false);
+    tx_t tx2 = tm_begin(region, false);
     {
+      // Test read in read-write memory
       char target[size];
       success = tm_read(region, tx1, mem, size, target);
 
@@ -51,19 +53,54 @@ MU_TEST(test_tm_read) {
       mu_check(tm_read(region, tx1, mem, 4, target3));
       mu_check(strncmp(target3, "mory", 4) == 0);
     }
-    tm_end(region, tx1);
-
-    tx_t tx2 = tm_begin(region, true);
     {
-      mem -= 4;
+      // Test write in read-write memory
+      char target[16];
+      mem += 4;
 
-      char target[size];
-      mu_check(tm_read(region, tx2, mem, size, target));
-      mu_check(strncmp(target, "o memory", size) == 0);
+      mu_check(tm_write(region, tx1, "Guy Fieri iscool", 16, mem));
+      mu_check(tm_read(region, tx1, mem, 16, target));
+      mu_check(strncmp(target, "Guy Fieri iscool", 16) == 0);
+
+      mu_check(tm_write(region, tx1, "Reif", 4, mem + 4));
+      mu_check(tm_read(region, tx1, mem, 16, target));
+      mu_check(strncmp(target, "Guy Reifi iscool", 16) == 0);
     }
+    {
+      // Test overwrite fails in read-write memory
+      char target[16];
+      mu_check(!tm_write(region, tx2, "Fieri is notcool", 16, mem));
+
+      mu_check(tm_read(region, tx1, mem, 16, target));
+      mu_check(strncmp(target, "Guy Reifi iscool", 16) == 0);
+    }
+    tm_end(region, tx1);
     tm_end(region, tx2);
 
-    // TODO: test transaction numbers
+    tx_t tx1_ro = tm_begin(region, true);
+    tx_t tx2_ro = tm_begin(region, true);
+    {
+      // Test read in read-only memory
+      mem = tm_start(region) + 4;
+
+      char target[size];
+      mu_check(tm_read(region, tx1_ro, mem, size, target));
+      mu_check(strncmp(target, "o memory", size) == 0);
+
+      mu_check(tm_read(region, tx2_ro, mem - 4, size, target));
+      mu_check(strncmp(target, "Hello memory", size) == 0);
+    }
+    tm_end(region, tx1_ro);
+    tm_end(region, tx2_ro);
+
+    {
+      // Test transaction numbers
+      mu_check(tx1 < tx2);
+      mu_check(tx1_ro < tx2_ro);
+
+      mu_check(!is_tx_readonly(tx1));
+      mu_check(is_tx_readonly(tx1_ro));
+    }
   }
   tm_destroy(region);
 }
@@ -221,7 +258,7 @@ MU_TEST_SUITE(test_suite) {
   MU_RUN_TEST(test_transaction);
   MU_RUN_TEST(test_opaque_ptr_arith);
   MU_RUN_TEST(test_tm_alloc_opaque_ptr);
-  MU_RUN_TEST(test_tm_read);
+  MU_RUN_TEST(test_tm_read_write);
 }
 
 int main() {
