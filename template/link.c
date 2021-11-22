@@ -28,11 +28,11 @@ void link_insert(link_t *base, segment_t *seg) {
 
   pthread_mutex_lock(&link_lock);
   {
-    link_t *prev = base->prev;
-    link->prev = prev;
+    link_t *last = base->prev;
+    link->prev = last;
     link->next = base;
     base->prev = link;
-    prev->next = link;
+    last->next = link;
   }
   pthread_mutex_unlock(&link_lock);
 }

@@ -70,17 +70,13 @@ MU_TEST(test_tm_read_write) {
     tm_end(region, tx1);
     tx_t tx2 = tm_begin(region, false);
     {
-      // Test overwrite fails in read-write memory
-      mu_check(!tm_write(region, tx2, "Fieri is notcool", 16, mem));
+      // Test overwrite succeedes in read-write memory
+      char target[16];
+      mu_check(tm_write(region, tx2, "Fieri is notcool", 16, mem));
+      mu_check(tm_read(region, tx2, mem, 16, target));
+      mu_check(strncmp(target, "Fieri is notcool", 16) == 0);
     }
     tm_end(region, tx2);
-
-    {
-      // Test failed write is not reflected
-      char target[16];
-      mu_check(tm_read(region, tx1, mem, 16, target));
-      mu_check(strncmp(target, "Guy Reifi iscool", 16) == 0);
-    }
 
     tx_t tx1_ro = tm_begin(region, true);
     {

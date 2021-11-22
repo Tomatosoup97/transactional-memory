@@ -80,18 +80,19 @@ void tm_destroy(shared_t shared) {
   if (DEBUG)
     printf("TM destroy\n");
   region_t *region = (region_t *)shared;
+  link_t *link = region->seg_links->next;
 
   while (true) {
-    link_t *link = region->seg_links->next;
-    bool is_last = link == region->seg_links;
-
     segment_t *seg = link->seg;
     link_remove(link);
+    // TODO: disable canary checks in actual solution
     SEG_CANARY_CHECK(seg);
     free_segment(seg);
 
+    bool is_last = link == region->seg_links;
     if (is_last)
       break;
+    link = link->next;
   }
 
   free(region->batcher);
