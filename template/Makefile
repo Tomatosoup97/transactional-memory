@@ -50,7 +50,10 @@ lint:
 	./lint.sh
 
 tests: $(OBJS) Makefile
-	$(CC) $(CCFLAGS) -o $@ $(OBJS) $(LDLIBS)
+	$(CC) $(CCFLAGS) -pthread -o $@ $(OBJS) $(LDLIBS)
 
 run_tests: clean lint tests
 	./tests
+
+grade:
+	cd .. && ./grade.sh
