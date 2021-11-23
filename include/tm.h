@@ -13,6 +13,7 @@ typedef struct region_s {
   size_t align;
   batcher_t *batcher;
   link_t *seg_links;
+  link_t *dirty_seg_links;
 } region_t;
 
 typedef void *shared_t;

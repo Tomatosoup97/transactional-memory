@@ -57,7 +57,8 @@ shared_t tm_create(size_t size, size_t align) {
     printf("TM create, size: %ld, align: %ld\n", size, align);
   region_t *region = (region_t *)malloc(sizeof(region_t));
   batcher_t *batcher = (batcher_t *)malloc(sizeof(batcher_t));
-  region->seg_links = (link_t *)malloc(sizeof(link_t));
+  region->seg_links = NULL;
+  region->dirty_seg_links = NULL;
   segment_t *seg = NULL;
 
   init_batcher(batcher);
@@ -70,7 +71,7 @@ shared_t tm_create(size_t size, size_t align) {
     return invalid_shared;
   }
 
-  link_init(region->seg_links, seg);
+  link_insert(&region->seg_links, seg);
 
   region->batcher = batcher;
   region->align = align;
@@ -271,7 +272,7 @@ alloc_t tm_alloc(shared_t shared, tx_t tx, size_t size, void **target) {
     return nomem_alloc;
   }
 
-  link_insert(region->seg_links, segment);
+  link_insert(&region->dirty_seg_links, segment);
   *target = cons_opaque_ptr_for_seg(segment);
   return success_alloc;
 }

@@ -162,10 +162,12 @@ MU_TEST(test_tm_alloc_opaque_ptr) {
   tx_t tx = tm_begin(region, true);
   tm_alloc(region, tx, 256, &ptr);
   {
-    segment_t *seg = region->seg_links->next->seg;
+    segment_t *seg = region->dirty_seg_links->seg;
+    segment_t *opaq_seg = (segment_t *)get_opaque_ptr_seg(ptr);
 
-    mu_check(get_opaque_ptr_seg(ptr) == seg);
+    mu_check(opaq_seg == seg);
     mu_check(get_opaque_ptr_word(ptr) == seg->read);
+    mu_check(opaq_seg->link == region->dirty_seg_links);
 
     ptr += 201;
 
@@ -183,7 +185,7 @@ MU_TEST(test_allocate_segment) {
 
   alloc_segment(&segment, 8, 48, 0);
 
-  mu_check(segment->pow2_exp == 8);
+  mu_check(segment->pow2_exp == 9);
   mu_check(segment->size == 48);
   free_segment(segment);
 }
@@ -286,14 +288,13 @@ MU_TEST(test_transaction) {
 
       mu_check(alloc_status == success_alloc);
       mu_check(region->seg_links->seg->size == align * 1);
-      mu_check(region->seg_links->next->seg->size == align * 2);
-      mu_check(region->seg_links->next->next == region->seg_links);
-      mu_check(region->seg_links->next->prev == region->seg_links);
+      mu_check(region->seg_links->next == region->seg_links);
+      mu_check(region->dirty_seg_links->seg->size == align * 2);
 
       alloc_status = tm_alloc(region, tx, align * 3, &mem2);
 
       mu_check(alloc_status == success_alloc);
-      mu_check(region->seg_links->prev->seg->size == align * 3);
+      mu_check(region->dirty_seg_links->prev->seg->size == align * 3);
     }
     tm_end(region, tx);
   }

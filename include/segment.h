@@ -6,6 +6,8 @@
 #include <stdint.h>
 #include <stdlib.h>
 
+struct Link;
+
 typedef uintptr_t tx_t;
 static tx_t const invalid_tx = ~((tx_t)0);
 static const tx_t read_only_tx = (UINTPTR_MAX >> 1) + 1;
@@ -25,6 +27,7 @@ typedef struct {
   size_t size;
   size_t pow2_exp;
   tx_t owner;
+  struct Link *link;
   bool newly_alloc;
   bool should_free;
   control_t *control;
