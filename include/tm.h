@@ -23,7 +23,7 @@ static alloc_t const success_alloc = 0;
 static alloc_t const abort_alloc = 1;
 static alloc_t const nomem_alloc = 2;
 
-int alloc_segment(segment_t **segment, size_t align, size_t size);
+int alloc_segment(segment_t **segment, size_t align, size_t size, tx_t tx);
 void free_segment(segment_t *segment);
 
 // Interface

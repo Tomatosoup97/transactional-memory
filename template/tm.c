@@ -18,9 +18,9 @@
 
 #define MAX_SEGMENTS_COUNT 65536
 
-static atomic_int trans_counter = 0;
+static atomic_int trans_counter = 1;
 
-int alloc_segment(segment_t **segment, size_t align, size_t size) {
+int alloc_segment(segment_t **segment, size_t align, size_t size, tx_t tx) {
   if (DEBUG)
     printf("Allocating segment\n");
   size_t words_count = size / align;
@@ -33,6 +33,7 @@ int alloc_segment(segment_t **segment, size_t align, size_t size) {
     return 1;
   }
 
+  (*segment)->owner = tx;
   (*segment)->newly_alloc = true;
   (*segment)->should_free = false;
   (*segment)->size = size;
@@ -65,7 +66,7 @@ shared_t tm_create(size_t size, size_t align) {
     return invalid_shared;
   }
 
-  if (unlikely(alloc_segment(&seg, align, size) != 0)) {
+  if (unlikely(alloc_segment(&seg, align, size, 0) != 0)) {
     return invalid_shared;
   }
 
@@ -160,11 +161,8 @@ bool read_word(tx_t tx, segment_t *seg, size_t align, void const *source,
   }
 }
 
-bool tm_read(shared_t shared, tx_t tx, void const *source, size_t size,
-             void *target) {
-  if (DEBUG)
-    printf("[%lx] TM read\n", tx);
-  region_t *region = (region_t *)shared;
+bool _tm_read(region_t *region, tx_t tx, void const *source, size_t size,
+              void *target) {
   segment_t *seg = (segment_t *)get_opaque_ptr_seg((void *)source);
   size_t read_offset = get_opaque_ptr_word_offset((void *)source);
   uint64_t word_count = read_offset / region->align;
@@ -184,6 +182,24 @@ bool tm_read(shared_t shared, tx_t tx, void const *source, size_t size,
     }
     return true;
   }
+}
+
+bool tm_read(shared_t shared, tx_t tx, void const *source, size_t size,
+             void *target) {
+  region_t *region = (region_t *)shared;
+
+  if (DEBUG)
+    printf("[%lx] TM read \n", tx);
+
+  bool res = _tm_read(region, tx, source, size, target);
+
+  if (DEBUG)
+    printf("[%lx] TM read - %s\n", tx, res ? "success" : "failure");
+
+  if (!res)
+    leave_batcher(region);
+
+  return res;
 }
 
 bool write_word(tx_t tx, segment_t *seg, size_t align, void const *source,
@@ -210,9 +226,8 @@ bool write_word(tx_t tx, segment_t *seg, size_t align, void const *source,
   }
 }
 
-bool _tm_write(shared_t shared, tx_t tx, void const *source, size_t size,
+bool _tm_write(region_t *region, tx_t tx, void const *source, size_t size,
                void *target) {
-  region_t *region = (region_t *)shared;
   segment_t *seg = (segment_t *)get_opaque_ptr_seg((void *)target);
   size_t write_offset = get_opaque_ptr_word_offset((void *)target);
   uint64_t word_count = write_offset / region->align;
@@ -231,22 +246,28 @@ bool _tm_write(shared_t shared, tx_t tx, void const *source, size_t size,
 
 bool tm_write(shared_t shared, tx_t tx, void const *source, size_t size,
               void *target) {
+  region_t *region = (region_t *)shared;
+
   if (DEBUG)
     printf("[%lx] TM writing \n", tx);
-  bool res = _tm_write(shared, tx, source, size, target);
+
+  bool res = _tm_write(region, tx, source, size, target);
+
   if (DEBUG)
     printf("[%lx] TM write - %s\n", tx, res ? "success" : "failure");
+
+  if (!res)
+    leave_batcher(region);
   return res;
 }
 
-alloc_t tm_alloc(shared_t shared, tx_t tx as(unused), size_t size,
-                 void **target) {
+alloc_t tm_alloc(shared_t shared, tx_t tx, size_t size, void **target) {
   if (DEBUG)
     printf("[%lx] TM alloc\n", tx);
   region_t *region = (region_t *)shared;
   segment_t *segment = NULL;
 
-  if (unlikely(alloc_segment(&segment, region->align, size) != 0)) {
+  if (unlikely(alloc_segment(&segment, region->align, size, tx) != 0)) {
     return nomem_alloc;
   }
 

@@ -12,6 +12,8 @@ static const tx_t read_only_tx = (UINTPTR_MAX >> 1) + 1;
 
 bool is_tx_readonly(tx_t tx);
 
+// TODO: rethink atomicity of vars
+
 typedef struct {
   tx_t access;
   bool written;
@@ -22,6 +24,7 @@ typedef struct {
   uint64_t canary;
   size_t size;
   size_t pow2_exp;
+  tx_t owner;
   bool newly_alloc;
   bool should_free;
   control_t *control;

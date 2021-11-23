@@ -181,7 +181,7 @@ MU_TEST(test_tm_alloc_opaque_ptr) {
 MU_TEST(test_allocate_segment) {
   segment_t *segment = NULL;
 
-  alloc_segment(&segment, 8, 48);
+  alloc_segment(&segment, 8, 48, 0);
 
   mu_check(segment->pow2_exp == 8);
   mu_check(segment->size == 48);
@@ -238,7 +238,7 @@ MU_TEST(test_batcher_multi_thread) {
     pthread_create(&(threads[i]), NULL, batcher_runner, &args[i]);
   }
 
-  sleep(0.5);
+  sleep(1);
 
   {
     mu_check(get_batcher_epoch(b) == 0);
@@ -253,8 +253,6 @@ MU_TEST(test_batcher_multi_thread) {
   for (int i = 0; i < thread_count; i++) {
     pthread_join(threads[i], NULL);
   }
-
-  sleep(0.5);
 
   mu_check(get_batcher_epoch(b) == 2);
   mu_check(b->remaining == 0);
@@ -271,7 +269,6 @@ MU_TEST(test_mem_region) {
 
     mu_check(get_opaque_ptr_seg(tm_start(region_p)) == region->seg_links->seg);
   }
-  /* shared_t region_p = tm_create(align * 32, align); */
   tm_destroy(region);
 }
 
