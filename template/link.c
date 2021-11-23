@@ -12,22 +12,20 @@ pthread_mutex_t link_lock = PTHREAD_MUTEX_INITIALIZER;
 
 void link_insert(link_t **base, segment_t *seg) {
   if (DEBUG)
-    printf("Inserting link\n");
+    printf("Inserting link into %p\n", (void *)*base);
 
   link_t *link = (link_t *)malloc(sizeof(link_t));
   link->seg = seg;
   seg->link = link;
 
-  if (*base == NULL) {
-    *base = link;
-    (*base)->prev = *base;
-    (*base)->next = *base;
-    printf("base %p\n", (void *)(*base));
-    printf("base seg %ld\n", (*base)->seg->size);
-  }
-
   pthread_mutex_lock(&link_lock);
   {
+    if (*base == NULL || (*base)->prev == NULL) {
+      *base = link;
+      (*base)->prev = *base;
+      (*base)->next = *base;
+    }
+
     link_t *last = (*base)->prev;
     link->prev = last;
     link->next = *base;
@@ -36,20 +34,24 @@ void link_insert(link_t **base, segment_t *seg) {
   }
   pthread_mutex_unlock(&link_lock);
   if (DEBUG)
-    printf("Inserted\n");
+    printf("Inserted %p\n", (void *)link);
 }
 
-void link_remove(link_t *link) {
+void link_remove(link_t **link) {
   if (DEBUG)
-    printf("Removing link\n");
+    printf("Removing link %p\n", (void *)*link);
+
   pthread_mutex_lock(&link_lock);
   {
-    link_t *prev = link->prev;
-    link_t *next = link->next;
+    link_t *prev = (*link)->prev;
+    link_t *next = (*link)->next;
     prev->next = next;
     next->prev = prev;
+    free(*link);
+    *link = NULL;
   }
   pthread_mutex_unlock(&link_lock);
 
-  free(link);
+  if (DEBUG)
+    printf("Removed link %p\n", (void *)*link);
 }

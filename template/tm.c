@@ -85,13 +85,13 @@ void tm_destroy(shared_t shared) {
   link_t *link = region->seg_links->next;
 
   while (true) {
+    bool is_last = link == region->seg_links;
     segment_t *seg = link->seg;
-    link_remove(link);
+    link_remove(&link);
     // TODO: disable canary checks in actual solution
     SEG_CANARY_CHECK(seg);
     free_segment(seg);
 
-    bool is_last = link == region->seg_links;
     if (is_last)
       break;
     link = link->next;
@@ -245,9 +245,16 @@ bool _tm_write(region_t *region, tx_t tx, void const *source, size_t size,
   return true;
 }
 
+void move_to_dirty(region_t *region, segment_t *seg) {
+  // TODO: to optimize, don't move if already on dirty list
+  link_remove(&seg->link);
+  link_insert(&region->dirty_seg_links, seg);
+}
+
 bool tm_write(shared_t shared, tx_t tx, void const *source, size_t size,
               void *target) {
   region_t *region = (region_t *)shared;
+  segment_t *seg = (segment_t *)get_opaque_ptr_seg((void *)target);
 
   if (DEBUG)
     printf("[%lx] TM writing \n", tx);
@@ -257,8 +264,12 @@ bool tm_write(shared_t shared, tx_t tx, void const *source, size_t size,
   if (DEBUG)
     printf("[%lx] TM write - %s\n", tx, res ? "success" : "failure");
 
-  if (!res)
+  if (res) {
+    move_to_dirty(region, seg);
+  } else {
     leave_batcher(region);
+  }
+
   return res;
 }
 

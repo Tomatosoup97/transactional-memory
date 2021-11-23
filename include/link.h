@@ -11,6 +11,6 @@ typedef struct Link {
 
 void link_insert(link_t **base, segment_t *seg);
 
-void link_remove(link_t *link);
+void link_remove(link_t **link);
 
 #endif
