@@ -37,6 +37,7 @@ int alloc_segment(segment_t **segment, size_t align, size_t size, tx_t tx) {
   (*segment)->newly_alloc = true;
   (*segment)->should_free = false;
   (*segment)->dirty = true;
+  (*segment)->rollback = false;
   (*segment)->size = size;
   (*segment)->pow2_exp = pow2_exp(seg_size);
   (*segment)->control = (control_t *)((void *)(*segment) + fst_aligned);
@@ -88,15 +89,18 @@ void tm_destroy(shared_t shared) {
 
   while (true) {
     bool is_last = link == region->seg_links;
+    link_t *next = link->next;
     segment_t *seg = link->seg;
-    link_remove(&link);
+    link_remove(&region->seg_links, &link);
     // TODO: disable canary checks in actual solution
     SEG_CANARY_CHECK(seg);
     free_segment(seg);
+    // TODO: disable check in actual solution
+    assert(region->dirty_seg_links == NULL);
 
     if (is_last)
       break;
-    link = link->next;
+    link = next;
   }
 
   free(region->batcher);
@@ -134,9 +138,6 @@ bool tm_end(shared_t shared, tx_t tx as(unused)) {
   if (DEBUG)
     printf("[%lx] TM end\n", tx);
   region_t *region = (region_t *)shared;
-
-  // TODO: mark things for committing here
-  // i.e. alloc and free segments, exec writes
 
   leave_batcher(region);
   return true; // TODO
@@ -191,12 +192,12 @@ bool tm_read(shared_t shared, tx_t tx, void const *source, size_t size,
              void *target) {
   region_t *region = (region_t *)shared;
 
-  if (DEBUG)
+  if (VERBOSE)
     printf("[%lx] TM read \n", tx);
 
   bool res = _tm_read(region, tx, source, size, target);
 
-  if (DEBUG)
+  if (VERBOSE)
     printf("[%lx] TM read - %s\n", tx, res ? "success" : "failure");
 
   if (!res)
@@ -247,10 +248,49 @@ bool _tm_write(region_t *region, tx_t tx, void const *source, size_t size,
   return true;
 }
 
+void move_to_clean(region_t *region, segment_t *seg) {
+  if (CAS(&seg->dirty, 1, 0)) {
+    if (DEBUG)
+      printf("[%p] Moving to clean\n", seg);
+    link_remove(&region->dirty_seg_links, &seg->link);
+    link_insert(&region->seg_links, seg);
+  }
+}
+
 void move_to_dirty(region_t *region, segment_t *seg) {
   if (CAS(&seg->dirty, 0, 1)) {
-    link_remove(&seg->link);
+    if (DEBUG)
+      printf("[%p] Moving to dirty\n", seg);
+    link_remove(&region->seg_links, &seg->link);
     link_insert(&region->dirty_seg_links, seg);
+  }
+}
+
+void rollback_transaction(region_t *region, tx_t tx) {
+  link_t *link = region->dirty_seg_links->next;
+  size_t align = region->align;
+  link_t *base = region->dirty_seg_links;
+
+  while (true) {
+    bool is_last = link == base;
+    segment_t *seg = link->seg;
+    size_t words_count = seg->size / align;
+    SEG_CANARY_CHECK(seg);
+
+    if (seg->owner == tx) {
+      seg->rollback = true;
+    }
+
+    for (size_t i = 0; i < words_count; i++) {
+      if (seg->control[i].written == tx) {
+        uint64_t offset = i * align;
+        memcpy(seg->write + offset, seg->read + offset, align);
+      }
+    }
+
+    if (is_last)
+      break;
+    link = link->next;
   }
 }
 
@@ -259,17 +299,18 @@ bool tm_write(shared_t shared, tx_t tx, void const *source, size_t size,
   region_t *region = (region_t *)shared;
   segment_t *seg = (segment_t *)get_opaque_ptr_seg((void *)target);
 
-  if (DEBUG)
+  if (VERBOSE)
     printf("[%lx] TM writing \n", tx);
 
   bool res = _tm_write(region, tx, source, size, target);
 
-  if (DEBUG)
+  if (VERBOSE)
     printf("[%lx] TM write - %s\n", tx, res ? "success" : "failure");
 
   if (res) {
     move_to_dirty(region, seg);
   } else {
+    rollback_transaction(region, tx);
     leave_batcher(region);
   }
 
@@ -291,10 +332,13 @@ alloc_t tm_alloc(shared_t shared, tx_t tx, size_t size, void **target) {
   return success_alloc;
 }
 
-bool tm_free(shared_t shared as(unused), tx_t tx as(unused), void *target) {
+bool tm_free(shared_t shared, tx_t tx, void *target) {
   if (DEBUG)
     printf("[%lx] TM free\n", tx);
+  region_t *region = (region_t *)shared;
   segment_t *seg = (segment_t *)get_opaque_ptr_seg(target);
   seg->should_free = true;
+  seg->owner = tx;
+  move_to_dirty(region, seg);
   return true;
 }

@@ -4,6 +4,8 @@
 #include <pthread.h>
 #include <stdatomic.h>
 
+#define COARSE_LOCK 1
+
 struct region_s;
 
 typedef struct {

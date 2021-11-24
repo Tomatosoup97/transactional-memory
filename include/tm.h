@@ -27,6 +27,9 @@ static alloc_t const nomem_alloc = 2;
 int alloc_segment(segment_t **segment, size_t align, size_t size, tx_t tx);
 void free_segment(segment_t *segment);
 
+void move_to_clean(region_t *region, segment_t *seg);
+void move_to_dirty(region_t *region, segment_t *seg);
+
 // Interface
 
 shared_t tm_create(size_t, size_t);

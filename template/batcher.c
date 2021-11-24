@@ -27,6 +27,9 @@ void enter_batcher(batcher_t *b) {
   // TODO: rethink critsec for optimization purposes
   assert(pthread_mutex_lock(&b->critsec) == 0);
 
+  if (COARSE_LOCK)
+    return;
+
   if (!CAS(&b->remaining, 0, 1)) {
     atomic_fetch_add(&b->blocked, 1);
     pthread_cond_wait(&b->waiters, &b->critsec);
@@ -36,40 +39,73 @@ void enter_batcher(batcher_t *b) {
 }
 
 void epoch_cleanup(struct region_s *region) {
-  link_t *link = region->seg_links->next;
+  if (region->dirty_seg_links == NULL) {
+    // Nothing to clean up
+    return;
+  }
+  link_t *link = region->dirty_seg_links->next;
+  link_t *next = NULL;
+  size_t align = region->align;
 
   while (true) {
+    bool is_last = link == region->dirty_seg_links;
+    next = link->next;
     segment_t *seg = link->seg;
-    size_t words_count = seg->size / region->align;
+    size_t words_count = seg->size / align;
     /* size_t fst_aligned = fst_aligned_offset(region->align); */
     size_t control_size = words_count * sizeof(control_t);
-
-    // TODO: handle read, write, dealloc, free etc
-    memset(seg->control, 0, control_size);
-
     SEG_CANARY_CHECK(seg);
 
-    bool is_last = link == region->seg_links;
+    bool success_free = (!seg->rollback) && seg->should_free;
+    bool failure_alloc = seg->rollback && seg->newly_alloc;
+
+    if (success_free || failure_alloc) {
+      if (DEBUG)
+        printf("[%p] Batcher: Freeing segment\n", seg);
+      // TODO: segfault potential?
+      link_remove(&region->dirty_seg_links, &seg->link);
+      free_segment(seg);
+    } else {
+      if (DEBUG)
+        printf("[%p] Batcher: Commiting segment\n", seg);
+
+      memset(seg->control, 0, control_size);
+      memcpy(seg->read, seg->write, seg->size);
+      move_to_clean(region, seg);
+
+      seg->owner = 0;
+      seg->newly_alloc = false;
+      seg->should_free = false;
+      seg->dirty = false;
+      seg->rollback = false;
+    }
+
     if (is_last)
       break;
-    link = link->next;
+    link = next;
   }
 }
 
 void leave_batcher(struct region_s *region) {
   batcher_t *b = region->batcher;
+
   if (DEBUG)
     printf("Leaving batcher, rem: %d, counter: %d, blocked: %d\n", b->remaining,
            b->counter, b->blocked);
-  assert(pthread_mutex_lock(&b->critsec) == 0);
 
+  if (COARSE_LOCK) {
+    epoch_cleanup(region);
+    assert(pthread_mutex_unlock(&b->critsec) == 0);
+    return;
+  }
+
+  assert(pthread_mutex_lock(&b->critsec) == 0);
   atomic_fetch_add(&b->remaining, -1);
 
   if (CAS(&b->remaining, 0, b->blocked)) {
-    // TODO: clean up here
-    atomic_fetch_add(&b->counter, 1);
-    b->blocked = 0;
     epoch_cleanup(region);
+    b->blocked = 0;
+    atomic_fetch_add(&b->counter, 1);
     pthread_cond_broadcast(&b->waiters);
   }
 

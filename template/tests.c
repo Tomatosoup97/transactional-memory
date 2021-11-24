@@ -7,6 +7,7 @@
 #include <sys/mman.h>
 #include <unistd.h>
 
+#include "batcher.h"
 #include "common.h"
 #include "minunit.h"
 #include "segment.h"
@@ -18,6 +19,96 @@ void test_setup(void) {
 
 void test_teardown(void) {
   // Do nothing
+}
+
+MU_TEST(test_template) {
+  shared_t region_p = tm_create(128, 1);
+  region_t *region = ((region_t *)region_p);
+  // void *mem = tm_start(region);
+  void *mem1, *mem2;
+
+  {
+    tx_t tx1 = tm_begin(region, false);
+    {
+      tm_alloc(region, tx1, 64, &mem1);
+      tm_alloc(region, tx1, 64, &mem2);
+    }
+    tm_end(region, tx1);
+  }
+  tm_destroy(region);
+}
+
+MU_TEST(test_write_reflected_in_next_trans) {
+  shared_t region_p = tm_create(128, 1);
+  region_t *region = ((region_t *)region_p);
+  void *mem = tm_start(region);
+  void *mem1;
+
+  {
+    tx_t tx = tm_begin(region, false);
+    {
+      char target[9];
+
+      mu_check(tm_alloc(region, tx, 64, &mem1) == success_alloc);
+
+      mu_check(tm_write(region, tx, "some", 4, mem));
+      mu_check(tm_write(region, tx, "thing", 5, mem + 4));
+      mu_check(tm_read(region, tx, mem, 9, target));
+      mu_check(strncmp(target, "something", 9) == 0);
+
+      mu_check(tm_write(region, tx, "dirty seg", 9, mem1));
+      mu_check(tm_read(region, tx, mem1, 9, target));
+      mu_check(strncmp(target, "dirty seg", 9) == 0);
+    }
+    tm_end(region, tx);
+
+    tx = tm_begin(region, false);
+    {
+      char target[9];
+
+      mu_check(tm_read(region, tx, mem, 9, target));
+      mu_check(strncmp(target, "something", 9) == 0);
+
+      mu_check(tm_read(region, tx, mem1, 9, target));
+      mu_check(strncmp(target, "dirty seg", 9) == 0);
+    }
+    tm_end(region, tx);
+  }
+  tm_destroy(region);
+}
+
+MU_TEST(test_free_is_commited) {
+  shared_t region_p = tm_create(128, 1);
+  region_t *region = ((region_t *)region_p);
+  void *mem1;
+
+  {
+    tx_t tx = tm_begin(region, false);
+
+    mu_check(region->dirty_seg_links == NULL);
+
+    mu_check(tm_alloc(region, tx, 64, &mem1) == success_alloc);
+    segment_t *seg = (segment_t *)get_opaque_ptr_seg(mem1);
+
+    mu_check(region->dirty_seg_links == seg->link);
+    mu_check(region->dirty_seg_links->next == seg->link);
+
+    tm_end(region, tx);
+
+    mu_check(region->dirty_seg_links == NULL);
+    mu_check(region->seg_links->next == seg->link);
+
+    tx = tm_begin(region, false);
+    {
+      mu_check(tm_free(region, tx, mem1));
+      mu_check(region->dirty_seg_links == seg->link);
+      mu_check(region->seg_links->next == region->seg_links);
+    }
+    tm_end(region, tx);
+    mu_check(region->seg_links->next == region->seg_links);
+    mu_check(region->dirty_seg_links == NULL);
+  }
+  tm_destroy(region);
 }
 
 MU_TEST(test_tm_read_write) {
@@ -84,8 +175,8 @@ MU_TEST(test_tm_read_write) {
       mem = tm_start(region) + 4;
 
       char target[size];
-      mu_check(tm_read(region, tx1_ro, mem, size, target));
-      mu_check(strncmp(target, "o memory", size) == 0);
+      mu_check(tm_read(region, tx1_ro, mem, 8, target));
+      mu_check(strncmp(target, "o memory", 8) == 0);
     }
 
     tm_end(region, tx1_ro);
@@ -93,8 +184,8 @@ MU_TEST(test_tm_read_write) {
     tx_t tx2_ro = tm_begin(region, true);
     {
       char target[size];
-      mu_check(tm_read(region, tx2_ro, mem - 4, size, target));
-      mu_check(strncmp(target, "Hello memory", size) == 0);
+      mu_check(tm_read(region, tx2_ro, mem - 4, 12, target));
+      mu_check(strncmp(target, "Hello memory", 12) == 0);
     }
     tm_end(region, tx2_ro);
 
@@ -191,6 +282,8 @@ MU_TEST(test_allocate_segment) {
 }
 
 MU_TEST(test_batcher_one_thread) {
+  if (COARSE_LOCK)
+    return;
   shared_t region_p = tm_create(32, 1);
   region_t *region = ((region_t *)region_p);
   batcher_t *b = region->batcher;
@@ -227,6 +320,8 @@ void *batcher_runner(void *p) {
 }
 
 MU_TEST(test_batcher_multi_thread) {
+  if (COARSE_LOCK)
+    return;
   shared_t region_p = tm_create(32, 1);
   region_t *region = ((region_t *)region_p);
   batcher_t *b = region->batcher;
@@ -313,6 +408,8 @@ MU_TEST(test_pow_funcs) {
 }
 
 MU_TEST_SUITE(test_suite) {
+  if (false) {
+  }
   MU_RUN_TEST(test_pow_funcs);
   MU_RUN_TEST(test_allocate_segment);
   MU_RUN_TEST(test_mem_region);
@@ -322,6 +419,9 @@ MU_TEST_SUITE(test_suite) {
   MU_RUN_TEST(test_tm_read_write);
   MU_RUN_TEST(test_batcher_one_thread);
   MU_RUN_TEST(test_batcher_multi_thread);
+  MU_RUN_TEST(test_template);
+  MU_RUN_TEST(test_write_reflected_in_next_trans);
+  MU_RUN_TEST(test_free_is_commited);
 }
 
 int main() {

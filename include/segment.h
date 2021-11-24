@@ -31,6 +31,7 @@ typedef struct {
   bool newly_alloc;
   bool should_free;
   bool dirty;
+  bool rollback;
   control_t *control;
   void *read;
   void *write;
