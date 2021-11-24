@@ -21,11 +21,12 @@ void init_batcher(batcher_t *b) {
 }
 
 void enter_batcher(batcher_t *b) {
+  // TODO: rethink critsec for optimization purposes
+  assert(pthread_mutex_lock(&b->critsec) == 0);
+
   if (DEBUG)
     printf("Entering batcher, rem: %d, counter: %d, blocked: %d\n",
            b->remaining, b->counter, b->blocked);
-  // TODO: rethink critsec for optimization purposes
-  assert(pthread_mutex_lock(&b->critsec) == 0);
 
   if (COARSE_LOCK)
     return;

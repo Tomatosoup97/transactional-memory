@@ -145,6 +145,9 @@ bool tm_end(shared_t shared, tx_t tx as(unused)) {
 
 bool read_word(tx_t tx, segment_t *seg, size_t align, void const *source,
                void *target, uint64_t offset, uint64_t word_count) {
+  if (VERBOSE)
+    printf("[%ld] word %ld, %ld access: %lx\n", tx, offset / (uint64_t)align,
+           word_count, seg->control[word_count].access);
 
   // TODO: make sure that it's atomic w.r.t to write_word
   if (seg->control[word_count].written) {
@@ -156,6 +159,7 @@ bool read_word(tx_t tx, segment_t *seg, size_t align, void const *source,
     }
   } else {
     CAS(&seg->control[word_count].access, 0, tx);
+    // TODO: if someone writes here it should fail
     memcpy(target + offset, source + offset, align);
 
     if (!(seg->control[word_count].access == tx)) {
@@ -192,13 +196,13 @@ bool tm_read(shared_t shared, tx_t tx, void const *source, size_t size,
              void *target) {
   region_t *region = (region_t *)shared;
 
-  if (VERBOSE)
-    printf("[%lx] TM read \n", tx);
+  /* if (VERBOSE) */
+  /*   printf("[%lx] TM read \n", tx); */
 
   bool res = _tm_read(region, tx, source, size, target);
 
-  if (VERBOSE)
-    printf("[%lx] TM read - %s\n", tx, res ? "success" : "failure");
+  /* if (VERBOSE) */
+  /*   printf("[%lx] TM read - %s\n", tx, res ? "success" : "failure"); */
 
   if (!res)
     leave_batcher(region);
@@ -208,6 +212,10 @@ bool tm_read(shared_t shared, tx_t tx, void const *source, size_t size,
 
 bool write_word(tx_t tx, segment_t *seg, size_t align, void const *source,
                 void *target, uint64_t offset, uint64_t word_count) {
+  if (VERBOSE)
+    printf("[%ld] word %ld, %ld access: %lx\n", tx, offset / (uint64_t)align,
+           word_count, seg->control[word_count].access);
+
   if (seg->control[word_count].written) {
     if (seg->control[word_count].access == tx) {
       memcpy(target + offset, source + offset, align);
@@ -282,7 +290,7 @@ void rollback_transaction(region_t *region, tx_t tx) {
     }
 
     for (size_t i = 0; i < words_count; i++) {
-      if (seg->control[i].written == tx) {
+      if (seg->control[i].written && seg->control[i].access == tx) {
         uint64_t offset = i * align;
         memcpy(seg->write + offset, seg->read + offset, align);
       }
