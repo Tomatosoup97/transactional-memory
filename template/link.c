@@ -5,8 +5,27 @@
 #include "common.h"
 #include "link.h"
 #include "segment.h"
+#include "tm.h"
 
 pthread_mutex_t link_lock = PTHREAD_MUTEX_INITIALIZER;
+
+void move_to_clean(struct region_s *region, segment_t *seg) {
+  if (CAS(&seg->dirty, 1, 0)) {
+    if (DEBUG)
+      printf("[%p] Moving to clean\n", seg);
+    link_remove(&region->dirty_seg_links, &seg->link);
+    link_insert(&region->seg_links, seg);
+  }
+}
+
+void move_to_dirty(struct region_s *region, segment_t *seg) {
+  if (CAS(&seg->dirty, 0, 1)) {
+    if (DEBUG)
+      printf("[%p] Moving to dirty\n", seg);
+    link_remove(&region->seg_links, &seg->link);
+    link_insert(&region->dirty_seg_links, seg);
+  }
+}
 
 // TODO: this lock-full approach is definitely slow
 

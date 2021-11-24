@@ -16,43 +16,7 @@
 #include "segment.h"
 #include "tm.h"
 
-#define MAX_SEGMENTS_COUNT 65536
-
 static atomic_int trans_counter = 1;
-
-int alloc_segment(segment_t **segment, size_t align, size_t size, tx_t tx) {
-  if (DEBUG)
-    printf("Allocating segment\n");
-  size_t words_count = size / align;
-  size_t fst_aligned = fst_aligned_offset(align);
-  size_t control_size = words_count * sizeof(control_t);
-  size_t seg_size = fst_aligned + control_size + size * 2;
-  size_t alloc = next_pow2(seg_size); // TODO: we calculate pow2_exp twice
-
-  if (unlikely(posix_memalign((void **)segment, alloc, alloc) != 0)) {
-    return 1;
-  }
-
-  (*segment)->owner = tx;
-  (*segment)->newly_alloc = true;
-  (*segment)->should_free = false;
-  (*segment)->dirty = true;
-  (*segment)->rollback = false;
-  (*segment)->size = size;
-  (*segment)->pow2_exp = pow2_exp(seg_size);
-  (*segment)->control = (control_t *)((void *)(*segment) + fst_aligned);
-  (*segment)->read = (void *)((*segment)->control) + control_size;
-  (*segment)->write = (*segment)->read + size;
-
-  SET_SEG_CANARY((*segment));
-
-  memset((*segment)->control, 0, control_size);
-  memset((*segment)->read, 0, size);
-  memset((*segment)->write, 0, size);
-  return 0;
-}
-
-void free_segment(segment_t *segment) { free(segment); }
 
 shared_t tm_create(size_t size, size_t align) {
   if (DEBUG)
@@ -142,24 +106,6 @@ bool tm_end(shared_t shared, tx_t tx as(unused)) {
 
   leave_batcher(region);
   return true; // TODO
-}
-
-void move_to_clean(region_t *region, segment_t *seg) {
-  if (CAS(&seg->dirty, 1, 0)) {
-    if (DEBUG)
-      printf("[%p] Moving to clean\n", seg);
-    link_remove(&region->dirty_seg_links, &seg->link);
-    link_insert(&region->seg_links, seg);
-  }
-}
-
-void move_to_dirty(region_t *region, segment_t *seg) {
-  if (CAS(&seg->dirty, 0, 1)) {
-    if (DEBUG)
-      printf("[%p] Moving to dirty\n", seg);
-    link_remove(&region->seg_links, &seg->link);
-    link_insert(&region->dirty_seg_links, seg);
-  }
 }
 
 void rollback_transaction(region_t *region, tx_t tx) {

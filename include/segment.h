@@ -37,6 +37,10 @@ typedef struct {
   void *write;
 } segment_t;
 
+void free_segment(segment_t *segment);
+
+int alloc_segment(segment_t **segment, size_t align, size_t size, tx_t tx);
+
 void cons_opaque_ptr(size_t exp, void **ptr);
 
 void *get_opaque_ptr_seg(void *ptr);
