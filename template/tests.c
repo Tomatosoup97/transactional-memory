@@ -123,6 +123,31 @@ MU_TEST(test_free_is_commited) {
   tm_destroy(region);
 }
 
+MU_TEST(test_no_alloc_on_failure) {
+  shared_t region_p = tm_create(128, 1);
+  region_t *region = ((region_t *)region_p);
+  void *mem1;
+  char target[9];
+
+  {
+    tx_t tx = tm_begin(region, false);
+
+    mu_check(region->dirty_seg_links == NULL);
+    mu_check(tm_alloc(region, tx, 64, &mem1) == success_alloc);
+    mu_check(tm_write(region, tx, "whops", 5, mem1));
+
+    segment_t *seg = (segment_t *)get_opaque_ptr_seg(mem1);
+    seg->control[1].written = 1;
+    seg->control[1].access = 0xf;
+
+    mu_check(!tm_read(region, tx, mem1, 5, target));
+  }
+
+  tx_t tx = tm_begin(region, true);
+  { mu_check(!tm_read(region, tx, mem1, 5, target)); }
+  tm_destroy(region);
+}
+
 MU_TEST(test_failed_write_is_rolledback) {
   shared_t region_p = tm_create(128, 1);
   region_t *region = ((region_t *)region_p);
@@ -148,14 +173,27 @@ MU_TEST(test_failed_write_is_rolledback) {
       mu_check(tm_write(region, tx2, "lamp", 4, mem1 + 5));
 
       mu_check(tm_read(region, tx2, mem1, 9, target));
+      mu_check(strncmp(target, "some lamp", 9) == 0);
 
       seg->control[1].written = 1;
       seg->control[1].access = tx1;
 
       mu_check(!tm_write(region, tx2, "nice", 4, mem1));
     }
-
     tx_t tx3 = tm_begin(region, false);
+    {
+      char target[9];
+      mu_check(tm_read(region, tx3, mem1, 9, target));
+      mu_check(strncmp(target, "some text", 9) == 0);
+
+      seg->control[1].written = 1;
+      seg->control[1].access = tx1;
+      mu_check(tm_read(region, tx3, mem1, 1, target));
+      mu_check(tm_read(region, tx3, mem1 + 2, 1, target));
+      mu_check(!tm_read(region, tx3, mem1, 2, target));
+    }
+
+    tx3 = tm_begin(region, true);
     {
       char target[9];
       mu_check(tm_read(region, tx3, mem1, 9, target));
@@ -478,6 +516,7 @@ MU_TEST_SUITE(test_suite) {
   MU_RUN_TEST(test_write_reflected_in_next_trans);
   MU_RUN_TEST(test_free_is_commited);
   MU_RUN_TEST(test_failed_write_is_rolledback);
+  MU_RUN_TEST(test_no_alloc_on_failure);
 }
 
 int main() {

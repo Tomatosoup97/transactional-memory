@@ -56,6 +56,7 @@ void epoch_cleanup(struct region_s *region) {
     /* size_t fst_aligned = fst_aligned_offset(region->align); */
     size_t control_size = words_count * sizeof(control_t);
     SEG_CANARY_CHECK(seg);
+    // TODO: initial segment should not be deallocated
 
     bool success_free = (!seg->rollback) && seg->should_free;
     bool failure_alloc = seg->rollback && seg->newly_alloc;
