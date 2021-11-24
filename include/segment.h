@@ -30,6 +30,7 @@ typedef struct {
   struct Link *link;
   bool newly_alloc;
   bool should_free;
+  bool dirty;
   control_t *control;
   void *read;
   void *write;

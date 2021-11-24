@@ -36,6 +36,7 @@ int alloc_segment(segment_t **segment, size_t align, size_t size, tx_t tx) {
   (*segment)->owner = tx;
   (*segment)->newly_alloc = true;
   (*segment)->should_free = false;
+  (*segment)->dirty = true;
   (*segment)->size = size;
   (*segment)->pow2_exp = pow2_exp(seg_size);
   (*segment)->control = (control_t *)((void *)(*segment) + fst_aligned);
@@ -71,6 +72,7 @@ shared_t tm_create(size_t size, size_t align) {
     return invalid_shared;
   }
 
+  seg->dirty = false;
   link_insert(&region->seg_links, seg);
 
   region->batcher = batcher;
@@ -246,9 +248,10 @@ bool _tm_write(region_t *region, tx_t tx, void const *source, size_t size,
 }
 
 void move_to_dirty(region_t *region, segment_t *seg) {
-  // TODO: to optimize, don't move if already on dirty list
-  link_remove(&seg->link);
-  link_insert(&region->dirty_seg_links, seg);
+  if (CAS(&seg->dirty, 0, 1)) {
+    link_remove(&seg->link);
+    link_insert(&region->dirty_seg_links, seg);
+  }
 }
 
 bool tm_write(shared_t shared, tx_t tx, void const *source, size_t size,

@@ -66,7 +66,6 @@ void leave_batcher(struct region_s *region) {
   atomic_fetch_add(&b->remaining, -1);
 
   if (CAS(&b->remaining, 0, b->blocked)) {
-    // TODO: do I need to call leave when write fails?
     // TODO: clean up here
     atomic_fetch_add(&b->counter, 1);
     b->blocked = 0;
