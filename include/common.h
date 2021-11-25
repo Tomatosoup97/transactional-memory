@@ -3,7 +3,6 @@
 
 #include <stdlib.h>
 
-#define NAIVE 1
 #define COARSE_LOCK 1
 #define DEBUG 0
 #define VERBOSE 0

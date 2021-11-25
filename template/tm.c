@@ -214,16 +214,7 @@ bool tm_read(shared_t shared, tx_t tx, void const *source, size_t size,
 }
 
 bool write_word(tx_t tx, segment_t *seg, size_t align, void const *source,
-                void *target, uint64_t offset, uint64_t word_count,
-                size_t write_offset) {
-
-  if (NAIVE) {
-    // XXX
-    /* memcpy(target + offset, source + offset, align); */
-    memcpy(seg->read + write_offset + offset, source + offset, align);
-    memcpy(seg->write + write_offset + offset, source + offset, align);
-    return true;
-  }
+                void *target, uint64_t offset, uint64_t word_count) {
 
   if (seg->control[word_count].written) {
     if (seg->control[word_count].access == tx) {
@@ -259,7 +250,7 @@ bool _tm_write(region_t *region, tx_t tx, void const *source, size_t size,
   uint64_t offset = 0;
   while (offset < size) {
     if (!write_word(tx, seg, region->align, source, seg->write + write_offset,
-                    offset, word_count, write_offset)) {
+                    offset, word_count)) {
       return false;
     }
     offset += region->align;

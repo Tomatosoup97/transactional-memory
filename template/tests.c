@@ -149,9 +149,6 @@ MU_TEST(test_no_alloc_on_failure) {
 }
 
 MU_TEST(test_failed_write_is_rolledback) {
-  if (NAIVE) {
-    return;
-  }
   shared_t region_p = tm_create(128, 1);
   region_t *region = ((region_t *)region_p);
   void *mem1;
