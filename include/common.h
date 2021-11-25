@@ -3,9 +3,10 @@
 
 #include <stdlib.h>
 
+#define NAIVE 1
 #define COARSE_LOCK 1
-#define DEBUG 1
-#define VERBOSE 1
+#define DEBUG 0
+#define VERBOSE 0
 #define VERBOSE_V2 0
 
 /* Define a proposition as likely true */

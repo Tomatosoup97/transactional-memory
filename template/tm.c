@@ -169,12 +169,12 @@ bool read_word(tx_t tx, segment_t *seg, size_t align, void const *source,
 bool _tm_read(region_t *region, tx_t tx, void const *source, size_t size,
               void *target) {
   segment_t *seg = (segment_t *)get_opaque_ptr_seg((void *)source);
-  if (seg->newly_alloc && seg->owner != tx) {
-    return false;
-  }
   size_t read_offset = get_opaque_ptr_word_offset((void *)source);
   uint64_t word_count = read_offset / region->align;
 
+  if (seg->newly_alloc && seg->owner != tx) {
+    return false;
+  }
   if (is_tx_readonly(tx)) {
     memcpy(target, seg->read + read_offset, size);
     return true;
@@ -242,6 +242,13 @@ bool _tm_write(region_t *region, tx_t tx, void const *source, size_t size,
   size_t write_offset = get_opaque_ptr_word_offset((void *)target);
   uint64_t word_count = write_offset / region->align;
 
+  if (NAIVE) {
+    // XXX
+    memcpy(seg->read + write_offset, source, size);
+    memcpy(seg->write + write_offset, source, size);
+    return true;
+  }
+
   uint64_t offset = 0;
   while (offset < size) {
     if (!write_word(tx, seg, region->align, source, seg->write + write_offset,
@@ -288,6 +295,7 @@ alloc_t tm_alloc(shared_t shared, tx_t tx, size_t size, void **target) {
   }
 
   link_insert(&region->dirty_seg_links, segment);
+
   *target = cons_opaque_ptr_for_seg(segment);
   return success_alloc;
 }
