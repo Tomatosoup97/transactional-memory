@@ -53,7 +53,6 @@ void epoch_cleanup(struct region_s *region) {
     next = link->next;
     segment_t *seg = link->seg;
     size_t words_count = seg->size / align;
-    /* size_t fst_aligned = fst_aligned_offset(region->align); */
     size_t control_size = words_count * sizeof(control_t);
     SEG_CANARY_CHECK(seg);
     // TODO: initial segment should not be deallocated
@@ -73,6 +72,7 @@ void epoch_cleanup(struct region_s *region) {
 
       memset(seg->control, 0, control_size);
       memcpy(seg->read, seg->write, seg->size);
+
       move_to_clean(region, seg);
 
       seg->owner = 0;
@@ -86,6 +86,8 @@ void epoch_cleanup(struct region_s *region) {
       break;
     link = next;
   }
+  if (DEBUG)
+    printf("=== End of epoch ===\n");
 }
 
 void leave_batcher(struct region_s *region) {

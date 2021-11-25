@@ -22,6 +22,7 @@ void move_to_dirty(struct region_s *region, segment_t *seg) {
   if (CAS(&seg->dirty, 0, 1)) {
     if (DEBUG)
       printf("[%p] Moving to dirty\n", seg);
+
     link_remove(&region->seg_links, &seg->link);
     link_insert(&region->dirty_seg_links, seg);
   }
@@ -63,11 +64,17 @@ void link_remove(link_t **base, link_t **link) {
   pthread_mutex_lock(&link_lock);
   {
     bool is_last = (*link)->prev == (*link);
+    bool is_base = (*link) == (*base);
 
     link_t *prev = (*link)->prev;
     link_t *next = (*link)->next;
     prev->next = next;
     next->prev = prev;
+
+    if (is_base) {
+      *base = next;
+    }
+
     free(*link);
     *link = NULL;
 
@@ -75,7 +82,4 @@ void link_remove(link_t **base, link_t **link) {
       *base = NULL;
   }
   pthread_mutex_unlock(&link_lock);
-
-  if (VERBOSE)
-    printf("Removed link %p\n", (void *)*link);
 }

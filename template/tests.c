@@ -503,6 +503,74 @@ MU_TEST(test_pow_funcs) {
   mu_check(next_pow2(65) == 128);
 }
 
+MU_TEST(test_links) {
+  shared_t region_p = tm_create(128, 1);
+  region_t *region = ((region_t *)region_p);
+  void *mem0 = tm_start(region);
+  void *mem1, *mem2;
+
+  {
+    tx_t tx = tm_begin(region, false);
+
+    tm_alloc(region, tx, 64, &mem1);
+    tm_alloc(region, tx, 64, &mem2);
+
+    segment_t *seg0 = (segment_t *)get_opaque_ptr_seg(mem0);
+    segment_t *seg1 = (segment_t *)get_opaque_ptr_seg(mem1);
+    segment_t *seg2 = (segment_t *)get_opaque_ptr_seg(mem2);
+
+    mu_check(region->seg_links->seg == seg0);
+    mu_check(region->dirty_seg_links->seg == seg1);
+    mu_check(region->dirty_seg_links->next->seg == seg2);
+    mu_check(region->dirty_seg_links->next->next->seg == seg1);
+
+    tm_end(region, tx);
+
+    tx = tm_begin(region, false);
+    {
+      mu_check(region->dirty_seg_links == NULL);
+      mu_check(region->seg_links->seg == seg0);
+      mu_check(region->seg_links->next->seg == seg2);
+      mu_check(region->seg_links->next->next->seg == seg1);
+
+      mu_check(tm_write(region, tx, "some", 4, mem1));
+
+      mu_check(region->dirty_seg_links->seg == seg1);
+      mu_check(region->dirty_seg_links->next->seg == seg1);
+
+      mu_check(region->seg_links->seg == seg0);
+      mu_check(region->seg_links->next->seg == seg2);
+      mu_check(region->seg_links->next->next->seg == seg0);
+
+      mu_check(tm_write(region, tx, "some", 4, mem0));
+
+      mu_check(region->dirty_seg_links->seg == seg1);
+      mu_check(region->dirty_seg_links->next->seg == seg0);
+      mu_check(region->dirty_seg_links->next->next->seg == seg1);
+
+      mu_check(region->seg_links->seg == seg2);
+      mu_check(region->seg_links->next->seg == seg2);
+
+      mu_check(tm_write(region, tx, "some", 4, mem1));
+
+      mu_check(region->dirty_seg_links->seg == seg1);
+      mu_check(region->dirty_seg_links->next->seg == seg0);
+      mu_check(region->dirty_seg_links->next->next->seg == seg1);
+
+      mu_check(region->seg_links->seg == seg2);
+      mu_check(region->seg_links->next->seg == seg2);
+    }
+    tm_end(region, tx);
+
+    mu_check(region->dirty_seg_links == NULL);
+    mu_check(region->seg_links->seg == seg2);
+    mu_check(region->seg_links->next->seg == seg0);
+    mu_check(region->seg_links->next->next->seg == seg1);
+  }
+
+  tm_destroy(region);
+}
+
 MU_TEST_SUITE(test_suite) {
   if (false) {
   }
@@ -520,6 +588,7 @@ MU_TEST_SUITE(test_suite) {
   MU_RUN_TEST(test_free_is_commited);
   MU_RUN_TEST(test_failed_write_is_rolledback);
   MU_RUN_TEST(test_no_alloc_on_failure);
+  MU_RUN_TEST(test_links);
 }
 
 int main() {
