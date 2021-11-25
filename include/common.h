@@ -3,7 +3,7 @@
 
 #include <stdlib.h>
 
-#define COARSE_LOCK 1
+#define COARSE_LOCK 0
 #define DEBUG 0
 #define VERBOSE 0
 #define VERBOSE_V2 0

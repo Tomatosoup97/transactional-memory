@@ -1,14 +1,17 @@
 #ifndef _SEGMENT_H_
 #define _SEGMENT_H_
 
+#include <pthread.h>
 #include <stdatomic.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdlib.h>
 
+#include "lock.h"
+
 struct Link;
 
-typedef uintptr_t tx_t;
+typedef unsigned long tx_t;
 static tx_t const invalid_tx = ~((tx_t)0);
 static const tx_t read_only_tx = (UINTPTR_MAX >> 1) + 1;
 
@@ -17,21 +20,23 @@ bool is_tx_readonly(tx_t tx);
 // TODO: rethink atomicity of vars
 
 typedef struct {
-  tx_t access;
-  bool written;
+  atomic_ulong access;
+  atomic_bool written;
   atomic_bool many_accesses;
+  spinlock_t lock;
 } control_t;
 
 typedef struct {
   uint64_t canary;
   size_t size;
   size_t pow2_exp;
-  tx_t owner;
+  atomic_ulong owner;
   struct Link *link;
+  pthread_mutex_t lock;
   bool newly_alloc;
-  bool should_free;
-  bool dirty;
-  bool rollback;
+  atomic_bool should_free;
+  atomic_bool dirty;
+  atomic_bool rollback;
   control_t *control;
   void *read;
   void *write;

@@ -1,5 +1,6 @@
 #define _POSIX_C_SOURCE 200809L
 
+#include <assert.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -32,6 +33,7 @@ int alloc_segment(segment_t **segment, size_t align, size_t size, tx_t tx) {
   (*segment)->rollback = false;
   (*segment)->size = size;
   (*segment)->pow2_exp = pow2_exp(seg_size);
+  assert(pthread_mutex_init(&(*segment)->lock, NULL) == 0);
   // TODO: is this really aligned? fst_aligned + ctrl?
   (*segment)->control = (control_t *)((void *)(*segment) + fst_aligned);
   (*segment)->read = (void *)((*segment)->control) + control_size;

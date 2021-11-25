@@ -1,5 +1,6 @@
 #pragma once
 
+#include <pthread.h>
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
@@ -15,6 +16,7 @@ typedef struct region_s {
   link_t *seg_links;
   link_t *dirty_seg_links;
   segment_t *start;
+  pthread_mutex_t lock;
 } region_t;
 
 typedef void *shared_t;
