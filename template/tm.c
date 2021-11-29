@@ -154,8 +154,7 @@ void rollback_transaction(region_t *region, tx_t tx) {
   }
 }
 
-bool read_word(tx_t tx, segment_t *seg, size_t align, void const *source,
-               void *target, uint64_t offset, uint64_t word_count) {
+bool can_read_word(tx_t tx, segment_t *seg, uint64_t word_count) {
   if (VERBOSE_V2)
     printf("[%lx] read word %ld, access: %lx, many: %d\n", tx, word_count,
            seg->control[word_count].access,
@@ -164,8 +163,7 @@ bool read_word(tx_t tx, segment_t *seg, size_t align, void const *source,
   // TODO: grab lock only for control struct accesses, not for memcpy
 
   if (seg->control[word_count].written) {
-    if (seg->control[word_count].access == tx) {
-      memcpy(target + offset, source + offset, align);
+    if (likely(seg->control[word_count].access == tx)) {
       return true;
     } else {
       return false;
@@ -176,7 +174,6 @@ bool read_word(tx_t tx, segment_t *seg, size_t align, void const *source,
     if (seg->control[word_count].access != tx) {
       seg->control[word_count].many_accesses = true;
     }
-    memcpy(target + offset, source + offset, align);
     return true;
   }
 }
@@ -185,13 +182,11 @@ bool _tm_read(region_t *region, tx_t tx, void const *source, size_t size,
               void *target) {
   segment_t *seg = (segment_t *)get_opaque_ptr_seg((void *)source);
   size_t read_offset = get_opaque_ptr_word_offset((void *)source);
-  uint64_t word_count = read_offset / region->align;
+  uint64_t align = region->align;
+  uint64_t word_count = read_offset / align;
+  void *actual_source = seg->write + read_offset;
 
-  if (read_offset > seg->size) {
-    return false;
-  }
-
-  if (seg->newly_alloc && seg->owner != tx) {
+  if (unlikely(seg->newly_alloc && seg->owner != tx)) {
     return false;
   }
 
@@ -204,13 +199,13 @@ bool _tm_read(region_t *region, tx_t tx, void const *source, size_t size,
     while (offset < size) {
       // TODO: it can be a shared lock to improve perf
       spinlock_acquire(&seg->control[word_count].lock);
-      bool success = read_word(tx, seg, region->align, seg->write + read_offset,
-                               target, offset, word_count);
+      bool success = can_read_word(tx, seg, word_count);
       spinlock_release(&seg->control[word_count].lock);
-      if (!success) {
+      if (unlikely(!success)) {
         return false;
       }
-      offset += region->align;
+      memcpy(target + offset, actual_source + offset, align);
+      offset += align;
       word_count++;
     }
     return true;
@@ -237,9 +232,8 @@ bool tm_read(shared_t shared, tx_t tx, void const *source, size_t size,
   return res;
 }
 
-bool write_word(region_t *region as(unused), tx_t tx, segment_t *seg,
-                size_t align, void const *source, void *target, uint64_t offset,
-                uint64_t word_count) {
+bool can_write_word(region_t *region as(unused), tx_t tx, segment_t *seg,
+                    uint64_t word_count) {
   if (VERBOSE_V2)
     printf("[%lx] write word %ld, access: %lx, many: %d\n", tx, word_count,
            seg->control[word_count].access,
@@ -251,7 +245,6 @@ bool write_word(region_t *region as(unused), tx_t tx, segment_t *seg,
         // TODO: that shouldnt' be necessary
         return false;
       }
-      memcpy(target + offset, source + offset, align);
       return true;
     } else {
       return false;
@@ -262,7 +255,6 @@ bool write_word(region_t *region as(unused), tx_t tx, segment_t *seg,
     if (seg->control[word_count].access == tx &&
         (!seg->control[word_count].many_accesses)) {
       seg->control[word_count].written = true;
-      memcpy(target + offset, source + offset, align);
       return true;
     } else {
       return false;
@@ -277,7 +269,9 @@ bool _tm_write(region_t *region, tx_t tx, void const *source, size_t size,
     return false;
   }
   size_t write_offset = get_opaque_ptr_word_offset((void *)target);
-  uint64_t word_count = write_offset / region->align;
+  uint64_t align = region->align;
+  uint64_t word_count = write_offset / align;
+  void *actual_target = seg->write + write_offset;
 
   if (write_offset > seg->size) {
     return false;
@@ -286,14 +280,14 @@ bool _tm_write(region_t *region, tx_t tx, void const *source, size_t size,
   uint64_t offset = 0;
   while (offset < size) {
     spinlock_acquire(&seg->control[word_count].lock);
-    bool success = write_word(region, tx, seg, region->align, source,
-                              seg->write + write_offset, offset, word_count);
+    bool success = can_write_word(region, tx, seg, word_count);
     spinlock_release(&seg->control[word_count].lock);
 
     if (!success) {
       return false;
     }
-    offset += region->align;
+    memcpy(actual_target + offset, source + offset, align);
+    offset += align;
     word_count++;
   }
   return true;
