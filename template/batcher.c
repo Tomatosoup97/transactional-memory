@@ -73,7 +73,7 @@ void epoch_cleanup(struct region_s *region) {
       memset(seg->control, 0, control_size);
       memcpy(seg->read, seg->write, seg->size);
 
-      move_to_clean(region, seg);
+      /* move_to_clean(region, seg); */
 
       seg->owner = 0;
       seg->newly_alloc = false;
@@ -86,6 +86,12 @@ void epoch_cleanup(struct region_s *region) {
       break;
     link = next;
   }
+
+  if (region->dirty_seg_links != NULL) {
+    link_append(&region->seg_links, region->dirty_seg_links);
+    region->dirty_seg_links = NULL;
+  }
+
   if (DEBUG)
     printf("=== End of epoch ===\n");
 }

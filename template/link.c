@@ -74,6 +74,21 @@ void link_insert(link_t **base, segment_t *seg, bool lock_taken) {
     printf("[%p] Inserted %p\n", seg, (void *)link);
 }
 
+void link_append(link_t **base, link_t *link) {
+  if (*base == NULL) {
+    *base = link;
+  } else {
+
+    link_t *base_last = (*base)->prev;
+    link_t *link_first = link;
+    link_t *link_last = link->prev;
+
+    base_last->next = link_first;
+    link_first->prev = base_last;
+    link_last->next = (*base);
+  }
+}
+
 void link_remove(link_t **base, link_t **link, bool lock_taken) {
   if (DEBUG)
     printf("[%p] Removing link %p\n", (*link)->seg, (void *)*link);
