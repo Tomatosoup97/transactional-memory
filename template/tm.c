@@ -55,9 +55,6 @@ void tm_destroy(shared_t shared) {
   region_t *region = (region_t *)shared;
   link_t *link = region->seg_links->next;
 
-  // TODO: shouldn't be needed
-  assert(pthread_mutex_lock(&region->lock) == 0);
-
   while (true) {
     bool is_last = link == region->seg_links;
     link_t *next = link->next;
@@ -67,11 +64,12 @@ void tm_destroy(shared_t shared) {
       printf("[%p] Freeing segment\n", seg);
 
     link_remove(&region->seg_links, &link, false);
-    // TODO: disable canary checks in actual solution
     SEG_CANARY_CHECK(seg);
     free_segment(seg);
-    // TODO: disable check in actual solution
-    assert(region->dirty_seg_links == NULL);
+
+    if (!OPT) {
+      assert(region->dirty_seg_links == NULL);
+    }
 
     if (is_last)
       break;
@@ -80,7 +78,6 @@ void tm_destroy(shared_t shared) {
 
   free(region->batcher);
   free(region);
-  assert(pthread_mutex_unlock(&region->lock) == 0);
 }
 
 void *tm_start(shared_t shared) {
@@ -119,10 +116,10 @@ bool tm_end(shared_t shared, tx_t tx as(unused)) {
 }
 
 void rollback_transaction(region_t *region, tx_t tx) {
-  // XXX
-  assert(pthread_mutex_lock(&region->lock) == 0);
+  if (DEBUG)
+    printf("[%lx] Rolling back transaction\n", tx);
+
   if (region->dirty_seg_links == NULL) {
-    assert(pthread_mutex_unlock(&region->lock) == 0);
     // Nothing to rollback
     return;
   }
@@ -145,6 +142,8 @@ void rollback_transaction(region_t *region, tx_t tx) {
       if (seg->control[i].written && seg->control[i].access == tx) {
         uint64_t offset = i * align;
         memcpy(seg->write + offset, seg->read + offset, align);
+        seg->control[i].written = 0;
+        seg->control[i].access = 0;
       }
       spinlock_release(&seg->control[i].lock);
     }
@@ -153,16 +152,16 @@ void rollback_transaction(region_t *region, tx_t tx) {
       break;
     link = link->next;
   }
-  assert(pthread_mutex_unlock(&region->lock) == 0);
 }
 
 bool read_word(tx_t tx, segment_t *seg, size_t align, void const *source,
                void *target, uint64_t offset, uint64_t word_count) {
   if (VERBOSE_V2)
-    printf("[%ld] word %ld, %ld access: %lx\n", tx, offset / (uint64_t)align,
-           word_count, seg->control[word_count].access);
+    printf("[%lx] read word %ld, access: %lx, many: %d\n", tx, word_count,
+           seg->control[word_count].access,
+           seg->control[word_count].many_accesses);
 
-  // TODO: make sure that it's atomic w.r.t to write_word
+  // TODO: grab lock only for control struct accesses, not for memcpy
 
   if (seg->control[word_count].written) {
     if (seg->control[word_count].access == tx) {
@@ -177,7 +176,6 @@ bool read_word(tx_t tx, segment_t *seg, size_t align, void const *source,
     if (seg->control[word_count].access != tx) {
       seg->control[word_count].many_accesses = true;
     }
-    // TODO: if someone writes here, it may fail
     memcpy(target + offset, source + offset, align);
     return true;
   }
@@ -189,29 +187,32 @@ bool _tm_read(region_t *region, tx_t tx, void const *source, size_t size,
   size_t read_offset = get_opaque_ptr_word_offset((void *)source);
   uint64_t word_count = read_offset / region->align;
 
+  if (read_offset > seg->size) {
+    return false;
+  }
+
   if (seg->newly_alloc && seg->owner != tx) {
     return false;
   }
+
   if (is_tx_readonly(tx)) {
     memcpy(target, seg->read + read_offset, size);
     return true;
   } else {
     uint64_t offset = 0;
-    // XXX
-    /* assert(pthread_mutex_lock(&seg->lock) == 0); */
+
     while (offset < size) {
+      // TODO: it can be a shared lock to improve perf
       spinlock_acquire(&seg->control[word_count].lock);
       bool success = read_word(tx, seg, region->align, seg->write + read_offset,
                                target, offset, word_count);
       spinlock_release(&seg->control[word_count].lock);
       if (!success) {
-        /* assert(pthread_mutex_unlock(&seg->lock) == 0); */
         return false;
       }
       offset += region->align;
       word_count++;
     }
-    /* assert(pthread_mutex_unlock(&seg->lock) == 0); */
     return true;
   }
 }
@@ -219,13 +220,16 @@ bool _tm_read(region_t *region, tx_t tx, void const *source, size_t size,
 bool tm_read(shared_t shared, tx_t tx, void const *source, size_t size,
              void *target) {
   region_t *region = (region_t *)shared;
+  segment_t *seg = (segment_t *)get_opaque_ptr_seg((void *)source);
 
   bool res = _tm_read(region, tx, source, size, target);
 
   if (VERBOSE_V2)
     printf("[%lx] TM read - %.30s\n", tx, res ? (char *)target : "failure");
 
-  if (!res) {
+  if (res) {
+    move_to_dirty(region, seg);
+  } else {
     rollback_transaction(region, tx);
     leave_batcher(region);
   }
@@ -236,6 +240,10 @@ bool tm_read(shared_t shared, tx_t tx, void const *source, size_t size,
 bool write_word(region_t *region as(unused), tx_t tx, segment_t *seg,
                 size_t align, void const *source, void *target, uint64_t offset,
                 uint64_t word_count) {
+  if (VERBOSE_V2)
+    printf("[%lx] write word %ld, access: %lx, many: %d\n", tx, word_count,
+           seg->control[word_count].access,
+           seg->control[word_count].many_accesses);
 
   if (seg->control[word_count].written) {
     if (seg->control[word_count].access == tx) {
@@ -253,7 +261,6 @@ bool write_word(region_t *region as(unused), tx_t tx, segment_t *seg,
 
     if (seg->control[word_count].access == tx &&
         (!seg->control[word_count].many_accesses)) {
-      // TODO: atomic?
       seg->control[word_count].written = true;
       memcpy(target + offset, source + offset, align);
       return true;
@@ -271,6 +278,10 @@ bool _tm_write(region_t *region, tx_t tx, void const *source, size_t size,
   }
   size_t write_offset = get_opaque_ptr_word_offset((void *)target);
   uint64_t word_count = write_offset / region->align;
+
+  if (write_offset > seg->size) {
+    return false;
+  }
 
   uint64_t offset = 0;
   while (offset < size) {
@@ -296,10 +307,7 @@ bool tm_write(shared_t shared, tx_t tx, void const *source, size_t size,
   if (VERBOSE)
     printf("[%lx] TM writing %.30s\n", tx, (char *)source);
 
-  // XXX
-  /* assert(pthread_mutex_lock(&seg->lock) == 0); */
   bool res = _tm_write(region, tx, source, size, target);
-  /* assert(pthread_mutex_unlock(&seg->lock) == 0); */
 
   if (VERBOSE)
     printf("[%lx] TM write - %s\n", tx, res ? "success" : "failure");

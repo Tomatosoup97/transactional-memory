@@ -7,6 +7,7 @@
 #define DEBUG 0
 #define VERBOSE 0
 #define VERBOSE_V2 0
+#define OPT 1
 
 /* Define a proposition as likely true */
 #undef likely
@@ -36,7 +37,7 @@
 #define CANARY_ADDR 0xDEADC0DE
 
 #define IS_SEG_VALID(segment) (segment->canary == CANARY_ADDR)
-#define SEG_CANARY_CHECK(segment) assert(IS_SEG_VALID((segment)))
+#define SEG_CANARY_CHECK(segment) (OPT ? 0 : assert(IS_SEG_VALID((segment))))
 #define SET_SEG_CANARY(segment) (segment->canary = CANARY_ADDR)
 
 #define CAS __sync_bool_compare_and_swap

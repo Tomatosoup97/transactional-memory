@@ -52,7 +52,7 @@ extern "C" {
 #include <sys/resource.h>
 #include <sys/time.h> /* gethrtime(), gettimeofday() */
 #include <sys/times.h>
-#include <time.h> /* clock_gettime(), time() */
+#include <time.h>   /* clock_gettime(), time() */
 #include <unistd.h> /* POSIX flags */
 
 #if defined(__MACH__) && defined(__APPLE__)
