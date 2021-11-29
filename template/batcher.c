@@ -27,9 +27,6 @@ void enter_batcher(batcher_t *b) {
     printf("Entering batcher, rem: %d, counter: %d, blocked: %d\n",
            b->remaining, b->counter, b->blocked);
 
-  if (COARSE_LOCK)
-    return;
-
   if (!CAS(&b->remaining, 0, 1)) {
     atomic_fetch_add(&b->blocked, 1);
     pthread_cond_wait(&b->waiters, &b->critsec);
@@ -102,14 +99,7 @@ void leave_batcher(struct region_s *region) {
     printf("Leaving batcher, rem: %d, counter: %d, blocked: %d\n", b->remaining,
            b->counter, b->blocked);
 
-  if (COARSE_LOCK) {
-    epoch_cleanup(region);
-    assert(pthread_mutex_unlock(&b->critsec) == 0);
-    return;
-  }
-
   assert(pthread_mutex_lock(&b->critsec) == 0);
-
   atomic_fetch_add(&b->remaining, -1);
 
   if (CAS(&b->remaining, 0, b->blocked)) {

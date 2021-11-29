@@ -375,8 +375,6 @@ MU_TEST(test_allocate_segment) {
 }
 
 MU_TEST(test_batcher_one_thread) {
-  if (COARSE_LOCK)
-    return;
   shared_t region_p = tm_create(32, 1);
   region_t *region = ((region_t *)region_p);
   batcher_t *b = region->batcher;
@@ -413,8 +411,6 @@ void *batcher_runner(void *p) {
 }
 
 MU_TEST(test_batcher_multi_thread) {
-  if (COARSE_LOCK)
-    return;
   shared_t region_p = tm_create(32, 1);
   region_t *region = ((region_t *)region_p);
   batcher_t *b = region->batcher;
