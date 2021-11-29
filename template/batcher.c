@@ -12,7 +12,6 @@
 int get_batcher_epoch(batcher_t *b) { return b->counter; }
 
 void init_batcher(batcher_t *b) {
-  // TODO: add unlikely here, remove asserts?
   b->counter = 0;
   b->remaining = 0;
   b->blocked = 0;
@@ -110,6 +109,7 @@ void leave_batcher(struct region_s *region) {
   }
 
   assert(pthread_mutex_lock(&b->critsec) == 0);
+
   atomic_fetch_add(&b->remaining, -1);
 
   if (CAS(&b->remaining, 0, b->blocked)) {

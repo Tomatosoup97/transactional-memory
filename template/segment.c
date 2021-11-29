@@ -20,7 +20,7 @@ int alloc_segment(segment_t **segment, size_t align, size_t size, tx_t tx) {
   size_t fst_aligned = fst_aligned_offset(align);
   size_t control_size = words_count * sizeof(control_t);
   size_t seg_size = fst_aligned + control_size + size * 2;
-  size_t alloc = next_pow2(seg_size); // TODO: we calculate pow2_exp twice
+  size_t alloc = next_pow2(seg_size);
 
   if (unlikely(posix_memalign((void **)segment, alloc, alloc) != 0)) {
     return 1;

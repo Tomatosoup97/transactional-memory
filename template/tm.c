@@ -160,8 +160,6 @@ bool can_read_word(tx_t tx, segment_t *seg, uint64_t word_count) {
            seg->control[word_count].access,
            seg->control[word_count].many_accesses);
 
-  // TODO: grab lock only for control struct accesses, not for memcpy
-
   if (seg->control[word_count].written) {
     if (likely(seg->control[word_count].access == tx)) {
       return true;
