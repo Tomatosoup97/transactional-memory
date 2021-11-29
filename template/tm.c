@@ -63,7 +63,7 @@ void tm_destroy(shared_t shared) {
     if (DEBUG)
       printf("[%p] Freeing segment\n", seg);
 
-    link_remove(&region->seg_links, &link, false);
+    link_remove(&region->seg_links, &link, false, true);
     SEG_CANARY_CHECK(seg);
     free_segment(seg);
 

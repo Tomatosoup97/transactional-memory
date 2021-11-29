@@ -17,8 +17,8 @@ void move_to_clean(struct region_s *region, segment_t *seg) {
 
     if (DEBUG)
       printf("[%p] Moving to clean\n", seg);
-    link_remove(&region->dirty_seg_links, &seg->link, true);
-    link_insert(&region->seg_links, seg, true);
+    link_remove(&region->dirty_seg_links, &seg->link, true, false);
+    _link_insert(&region->seg_links, seg->link, true);
 
     assert(pthread_mutex_unlock(&link_lock) == 0);
   }
@@ -32,27 +32,30 @@ void move_to_dirty(struct region_s *region, segment_t *seg) {
     if (DEBUG)
       printf("[%p] Moving to dirty\n", seg);
 
-    link_remove(&region->seg_links, &seg->link, true);
-    link_insert(&region->dirty_seg_links, seg, true);
+    link_remove(&region->seg_links, &seg->link, true, false);
+    _link_insert(&region->dirty_seg_links, seg->link, true);
 
     assert(pthread_mutex_unlock(&link_lock) == 0);
   }
 }
 
 // TODO: this lock-full approach is definitely slow
-
 void link_insert(link_t **base, segment_t *seg, bool lock_taken) {
-  if (DEBUG)
-    printf("[%p] Inserting link into %p\n", seg, (void *)*base);
-
   link_t *link = (link_t *)malloc(sizeof(link_t));
+
+  link->seg = seg;
+  seg->link = link;
+
+  _link_insert(base, link, lock_taken);
+}
+
+void _link_insert(link_t **base, link_t *link, bool lock_taken) {
+  if (DEBUG)
+    printf("[%p] Inserting link into %p\n", link, (void *)*base);
 
   if (!lock_taken) {
     pthread_mutex_lock(&link_lock);
   }
-
-  link->seg = seg;
-  seg->link = link;
 
   {
     if (*base == NULL || (*base)->prev == NULL) {
@@ -71,7 +74,7 @@ void link_insert(link_t **base, segment_t *seg, bool lock_taken) {
     pthread_mutex_unlock(&link_lock);
   }
   if (VERBOSE)
-    printf("[%p] Inserted %p\n", seg, (void *)link);
+    printf("[%p] Link inserted \n", (void *)link);
 }
 
 void link_append(link_t **base, link_t *link) {
@@ -89,7 +92,7 @@ void link_append(link_t **base, link_t *link) {
   }
 }
 
-void link_remove(link_t **base, link_t **link, bool lock_taken) {
+void link_remove(link_t **base, link_t **link, bool lock_taken, bool discard) {
   if (DEBUG)
     printf("[%p] Removing link %p\n", (*link)->seg, (void *)*link);
 
@@ -109,8 +112,10 @@ void link_remove(link_t **base, link_t **link, bool lock_taken) {
       *base = next;
     }
 
-    free(*link);
-    *link = NULL;
+    if (discard) {
+      free(*link);
+      *link = NULL;
+    }
 
     if (is_last)
       *base = NULL;

@@ -64,7 +64,7 @@ void epoch_cleanup(struct region_s *region) {
       if (DEBUG)
         printf("[%p] Batcher: Freeing segment\n", seg);
       // TODO: segfault potential?
-      link_remove(&region->dirty_seg_links, &seg->link, false);
+      link_remove(&region->dirty_seg_links, &seg->link, false, true);
       free_segment(seg);
     } else {
       if (DEBUG)
