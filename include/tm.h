@@ -27,9 +27,6 @@ static alloc_t const success_alloc = 0;
 static alloc_t const abort_alloc = 1;
 static alloc_t const nomem_alloc = 2;
 
-void move_to_clean(region_t *region, segment_t *seg);
-void move_to_dirty(region_t *region, segment_t *seg);
-
 // Interface
 
 shared_t tm_create(size_t, size_t);

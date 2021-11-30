@@ -18,7 +18,6 @@ struct Link;
 typedef unsigned long tx_t;
 static tx_t const invalid_tx = ~((tx_t)0);
 
-
 // TODO: rethink atomicity of vars
 
 typedef struct {

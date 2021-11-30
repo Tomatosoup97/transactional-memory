@@ -7,11 +7,6 @@
 #include "common.h"
 #include "lock.h"
 
-bool spinlock_init(spinlock_t *lock) {
-  atomic_init(&(lock->locked), false);
-  return true;
-}
-
 bool spinlock_acquire(spinlock_t *lock) {
   bool expected = false;
   while (unlikely(!atomic_compare_exchange_weak_explicit(
@@ -23,10 +18,6 @@ bool spinlock_acquire(spinlock_t *lock) {
       sched_yield();
   }
   return true;
-}
-
-void spinlock_release(spinlock_t *lock) {
-  atomic_store_explicit(&(lock->locked), false, memory_order_release);
 }
 
 /* Reader-writer shared lock */

@@ -15,11 +15,16 @@ typedef struct {
 
 typedef pthread_rwlock_t rwlock_t;
 
-bool spinlock_init(spinlock_t *lock);
+inline bool spinlock_init(spinlock_t *lock) {
+  atomic_init(&(lock->locked), false);
+  return true;
+}
 
 bool spinlock_acquire(spinlock_t *lock);
 
-void spinlock_release(spinlock_t *lock);
+inline void spinlock_release(spinlock_t *lock) {
+  atomic_store_explicit(&(lock->locked), false, memory_order_release);
+}
 
 bool rwlock_init(rwlock_t *lock);
 

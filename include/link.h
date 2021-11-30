@@ -19,7 +19,7 @@ void move_to_dirty(struct region_s *region, segment_t *seg);
 
 void link_insert(link_t **base, segment_t *seg, bool lock_taken);
 
-void _link_insert(link_t **base, link_t *link, bool lock_taken);
+void _link_insert(link_t **base, link_t *link);
 
 void link_append(link_t **base, link_t *link);
 

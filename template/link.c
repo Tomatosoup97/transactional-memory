@@ -20,7 +20,7 @@ void move_to_clean(struct region_s *region, segment_t *seg) {
     if (DEBUG)
       printf("[%p] Moving to clean\n", seg);
     link_remove(&region->dirty_seg_links, &seg->link, true, false);
-    _link_insert(&region->seg_links, seg->link, true);
+    _link_insert(&region->seg_links, seg->link);
 
     assert(pthread_mutex_unlock(&link_lock) == 0);
   }
@@ -35,7 +35,7 @@ void move_to_dirty(struct region_s *region, segment_t *seg) {
       printf("[%p] Moving to dirty\n", seg);
 
     link_remove(&region->seg_links, &seg->link, true, false);
-    _link_insert(&region->dirty_seg_links, seg->link, true);
+    _link_insert(&region->dirty_seg_links, seg->link);
 
     assert(pthread_mutex_unlock(&link_lock) == 0);
   }
@@ -43,38 +43,39 @@ void move_to_dirty(struct region_s *region, segment_t *seg) {
 
 // TODO: this lock-full approach is definitely slow
 void link_insert(link_t **base, segment_t *seg, bool lock_taken) {
+  if (!lock_taken) {
+    pthread_mutex_lock(&link_lock);
+  }
+
   link_t *link = (link_t *)malloc(sizeof(link_t));
 
   link->seg = seg;
   seg->link = link;
 
-  _link_insert(base, link, lock_taken);
-}
+  _link_insert(base, link);
 
-void _link_insert(link_t **base, link_t *link, bool lock_taken) {
-  if (DEBUG)
-    printf("[%p] Inserting link into %p\n", link, (void *)*base);
-
-  if (!lock_taken) {
-    pthread_mutex_lock(&link_lock);
-  }
-
-  {
-    if (*base == NULL || (*base)->prev == NULL) {
-      *base = link;
-      (*base)->prev = *base;
-      (*base)->next = *base;
-    }
-
-    link_t *last = (*base)->prev;
-    link->prev = last;
-    link->next = *base;
-    (*base)->prev = link;
-    last->next = link;
-  }
   if (!lock_taken) {
     pthread_mutex_unlock(&link_lock);
   }
+}
+
+void _link_insert(link_t **base, link_t *link) {
+  if (DEBUG)
+    printf("[%p] Inserting link into %p\n", link, (void *)*base);
+
+  if (*base == NULL || (*base)->prev == NULL) {
+    *base = link;
+    (*base)->prev = *base;
+    (*base)->next = *base;
+    return;
+  }
+
+  link_t *last = (*base)->prev;
+  link->prev = last;
+  link->next = *base;
+  (*base)->prev = link;
+  last->next = link;
+
   if (VERBOSE)
     printf("[%p] Link inserted \n", (void *)link);
 }
@@ -96,33 +97,25 @@ void link_append(link_t **base, link_t *link) {
 
 void link_remove(link_t **base, link_t **link, bool lock_taken, bool discard) {
   if (DEBUG)
-    printf("[%p] Removing link %p\n", (*link)->seg, (void *)*link);
+    printf("[%p] Removing link %p, lock: %d\n", (*link)->seg, (void *)*link, lock_taken);
 
-  if (!lock_taken) {
-    pthread_mutex_lock(&link_lock);
+  bool is_last = (*link)->prev == (*link);
+  bool is_base = (*link) == (*base);
+
+  link_t *prev = (*link)->prev;
+  link_t *next = (*link)->next;
+  prev->next = next;
+  next->prev = prev;
+
+  if (is_base) {
+    *base = next;
   }
-  {
-    bool is_last = (*link)->prev == (*link);
-    bool is_base = (*link) == (*base);
 
-    link_t *prev = (*link)->prev;
-    link_t *next = (*link)->next;
-    prev->next = next;
-    next->prev = prev;
-
-    if (is_base) {
-      *base = next;
-    }
-
-    if (discard) {
-      free(*link);
-      *link = NULL;
-    }
-
-    if (is_last)
-      *base = NULL;
+  if (unlikely(discard)) {
+    free(*link);
+    *link = NULL;
   }
-  if (!lock_taken) {
-    pthread_mutex_unlock(&link_lock);
-  }
+
+  if (is_last)
+    *base = NULL;
 }
