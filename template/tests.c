@@ -1,3 +1,5 @@
+#define _GNU_SOURCE
+
 #include <assert.h>
 #include <errno.h>
 #include <limits.h>
@@ -9,9 +11,15 @@
 
 #include "batcher.h"
 #include "common.h"
-#include "minunit.h"
 #include "segment.h"
 #include "tm.h"
+
+// Ignore warnings from minunit header file
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wmaybe-uninitialized"
+#pragma GCC diagnostic ignored "-Wuninitialized"
+#include "minunit.h"
+#pragma GCC diagnostic pop
 
 void test_setup(void) {
   // Do nothing

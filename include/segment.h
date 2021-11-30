@@ -1,6 +1,8 @@
 #ifndef _SEGMENT_H_
 #define _SEGMENT_H_
 
+#define _GNU_SOURCE
+
 #include <pthread.h>
 #include <stdatomic.h>
 #include <stdbool.h>

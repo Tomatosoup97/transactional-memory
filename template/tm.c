@@ -202,6 +202,8 @@ bool _tm_read(region_t *region, tx_t tx, void const *source, size_t size,
       if (unlikely(!success)) {
         return false;
       }
+      bool was_written = seg->control[word_count].written;
+      actual_source = (was_written ? seg->write : seg->read) + read_offset;
       memcpy(target + offset, actual_source + offset, align);
       offset += align;
       word_count++;

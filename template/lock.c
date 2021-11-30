@@ -1,3 +1,5 @@
+#define _GNU_SOURCE
+
 #include <sched.h>
 #include <stdlib.h>
 #include <string.h>
@@ -26,3 +28,21 @@ bool spinlock_acquire(spinlock_t *lock) {
 void spinlock_release(spinlock_t *lock) {
   atomic_store_explicit(&(lock->locked), false, memory_order_release);
 }
+
+/* Reader-writer shared lock */
+
+bool rwlock_init(rwlock_t *lock) {
+  return (pthread_rwlock_init(lock, NULL) == 0);
+}
+
+void rwlock_cleanup(rwlock_t *lock) { pthread_rwlock_destroy(lock); }
+
+bool rwlock_acquire_writer(rwlock_t *lock) {
+  return (pthread_rwlock_wrlock(lock) == 0);
+}
+
+bool rwlock_acquire_reader(rwlock_t *lock) {
+  return (pthread_rwlock_rdlock(lock) == 0);
+}
+
+void rwlock_release(rwlock_t *lock) { pthread_rwlock_unlock(lock); }

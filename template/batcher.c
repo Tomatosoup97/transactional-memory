@@ -1,3 +1,5 @@
+#define _GNU_SOURCE
+
 #include <assert.h>
 #include <pthread.h>
 #include <stdatomic.h>
@@ -21,18 +23,19 @@ void init_batcher(batcher_t *b) {
 
 void enter_batcher(batcher_t *b) {
   // TODO: rethink critsec for optimization purposes
-  assert(pthread_mutex_lock(&b->critsec) == 0);
 
   if (DEBUG)
     printf("Entering batcher, rem: %d, counter: %d, blocked: %d\n",
            b->remaining, b->counter, b->blocked);
 
   if (!CAS(&b->remaining, 0, 1)) {
-    atomic_fetch_add(&b->blocked, 1);
-    pthread_cond_wait(&b->waiters, &b->critsec);
+    assert(pthread_mutex_lock(&b->critsec) == 0);
+    {
+      atomic_fetch_add(&b->blocked, 1);
+      pthread_cond_wait(&b->waiters, &b->critsec);
+    }
+    assert(pthread_mutex_unlock(&b->critsec) == 0);
   }
-
-  assert(pthread_mutex_unlock(&b->critsec) == 0);
 }
 
 void epoch_cleanup(struct region_s *region) {
@@ -51,7 +54,6 @@ void epoch_cleanup(struct region_s *region) {
     size_t words_count = seg->size / align;
     size_t control_size = words_count * sizeof(control_t);
     SEG_CANARY_CHECK(seg);
-    // TODO: initial segment should not be deallocated
 
     bool success_free = (!seg->rollback) && seg->should_free;
     bool failure_alloc = seg->rollback && seg->newly_alloc;
@@ -59,7 +61,6 @@ void epoch_cleanup(struct region_s *region) {
     if (success_free || failure_alloc) {
       if (DEBUG)
         printf("[%p] Batcher: Freeing segment\n", seg);
-      // TODO: segfault potential?
       link_remove(&region->dirty_seg_links, &seg->link, false, true);
       free_segment(seg);
     } else {
@@ -68,8 +69,6 @@ void epoch_cleanup(struct region_s *region) {
 
       memset(seg->control, 0, control_size);
       memcpy(seg->read, seg->write, seg->size);
-
-      /* move_to_clean(region, seg); */
 
       seg->owner = 0;
       seg->newly_alloc = false;

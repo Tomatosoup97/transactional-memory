@@ -1,6 +1,8 @@
 #ifndef _LINK_H_
 #define _LINK_H_
 
+#define _GNU_SOURCE
+
 #include "segment.h"
 
 struct region_s;
