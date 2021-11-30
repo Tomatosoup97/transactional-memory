@@ -17,11 +17,11 @@ SRCS_CXX := $(call WILD_EXT,EXT_CXX,$(SOURCE_DIR))
 OBJS     := $(SRCS_C:%=%.o) $(SRCS_CXX:%=%.o)
 
 CC       := $(CC)
-CCFLAGS  := -Wall -Wextra -Wfatal-errors -O2 -std=c11 -fPIC -I$(INCLUDE_DIR)
+CCFLAGS  := -g -Wall -Wextra -Wfatal-errors -O2 -std=c11 -fPIC -I$(INCLUDE_DIR)
 CXX      := $(CXX)
-CXXFLAGS := -Wall -Wextra -Wfatal-errors -O2 -std=c++17 -fPIC -I$(INCLUDE_DIR)
+CXXFLAGS := -g -Wall -Wextra -Wfatal-errors -O2 -std=c++17 -fPIC -I$(INCLUDE_DIR)
 LD       := $(if $(SRCS_CXX),$(CXX),$(CC))
-LDFLAGS  := -shared
+LDFLAGS  := -g -shared
 LDLIBS   :=
 
 .PHONY: build clean
@@ -56,4 +56,7 @@ run_tests: clean lint tests
 	./tests
 
 grade:
-	cd .. && ./grade.sh
+	cd .. && ./grade.sh run
+
+perf:
+	cd .. && ./grade.sh perf

@@ -6,6 +6,8 @@ tests
 yqAHxv*
 grading/grading
 grade.sh
+perf.data*
+solution.zip
 
 ### C ###
 # Prerequisites
