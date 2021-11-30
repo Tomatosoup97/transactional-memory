@@ -377,7 +377,6 @@ MU_TEST(test_allocate_segment) {
 
   alloc_segment(&segment, 8, 48, 0);
 
-  mu_check(segment->pow2_exp == 9);
   mu_check(segment->size == 48);
   free_segment(segment);
 }

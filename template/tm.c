@@ -176,13 +176,10 @@ bool can_read_word(tx_t tx, segment_t *seg, uint64_t word_count) {
   }
 }
 
-bool _tm_read(region_t *region, tx_t tx, void const *source, size_t size,
-              void *target) {
-  segment_t *seg = (segment_t *)get_opaque_ptr_seg((void *)source);
-  size_t read_offset = get_opaque_ptr_word_offset((void *)source);
+bool _tm_read(region_t *region, tx_t tx, size_t size, void *target,
+              segment_t *seg, size_t read_offset) {
   uint64_t align = region->align;
   uint64_t word_count = read_offset / align;
-  void *actual_source = seg->write + read_offset;
 
   if (unlikely(seg->newly_alloc && seg->owner != tx)) {
     return false;
@@ -202,9 +199,6 @@ bool _tm_read(region_t *region, tx_t tx, void const *source, size_t size,
       if (unlikely(!success)) {
         return false;
       }
-      bool was_written = seg->control[word_count].written;
-      actual_source = (was_written ? seg->write : seg->read) + read_offset;
-      memcpy(target + offset, actual_source + offset, align);
       offset += align;
       word_count++;
     }
@@ -215,15 +209,23 @@ bool _tm_read(region_t *region, tx_t tx, void const *source, size_t size,
 bool tm_read(shared_t shared, tx_t tx, void const *source, size_t size,
              void *target) {
   region_t *region = (region_t *)shared;
-  segment_t *seg = (segment_t *)get_opaque_ptr_seg((void *)source);
 
-  bool res = _tm_read(region, tx, source, size, target);
+  void *word = get_opaque_ptr_word((void *)source);
+  segment_t *seg = (segment_t *)get_opaque_ptr_seg_word((void *)source, word);
+  size_t read_offset = get_word_seg_offset(word, seg);
+
+  bool res = _tm_read(region, tx, size, target, seg, read_offset);
 
   if (VERBOSE_V2)
     printf("[%lx] TM read - %.30s\n", tx, res ? (char *)target : "failure");
 
+  bool is_readonly = is_tx_readonly(tx);
+
   if (res) {
-    move_to_dirty(region, seg);
+    if (!is_readonly) {
+      memcpy(target, seg->write + read_offset, size);
+      move_to_dirty(region, seg);
+    }
   } else {
     rollback_transaction(region, tx);
     leave_batcher(region);
@@ -263,12 +265,10 @@ bool can_write_word(region_t *region as(unused), tx_t tx, segment_t *seg,
 }
 
 bool _tm_write(region_t *region, tx_t tx, void const *source, size_t size,
-               void *target) {
-  segment_t *seg = (segment_t *)get_opaque_ptr_seg((void *)target);
+               segment_t *seg, size_t write_offset) {
   if (seg->newly_alloc && seg->owner != tx) {
     return false;
   }
-  size_t write_offset = get_opaque_ptr_word_offset((void *)target);
   uint64_t align = region->align;
   uint64_t word_count = write_offset / align;
   void *actual_target = seg->write + write_offset;
@@ -296,12 +296,15 @@ bool _tm_write(region_t *region, tx_t tx, void const *source, size_t size,
 bool tm_write(shared_t shared, tx_t tx, void const *source, size_t size,
               void *target) {
   region_t *region = (region_t *)shared;
-  segment_t *seg = (segment_t *)get_opaque_ptr_seg((void *)target);
+
+  void *word = get_opaque_ptr_word((void *)target);
+  segment_t *seg = (segment_t *)get_opaque_ptr_seg_word((void *)target, word);
+  size_t write_offset = get_word_seg_offset(word, seg);
 
   if (VERBOSE)
     printf("[%lx] TM writing %.30s\n", tx, (char *)source);
 
-  bool res = _tm_write(region, tx, source, size, target);
+  bool res = _tm_write(region, tx, source, size, seg, write_offset);
 
   if (VERBOSE)
     printf("[%lx] TM write - %s\n", tx, res ? "success" : "failure");

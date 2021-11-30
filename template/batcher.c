@@ -28,14 +28,15 @@ void enter_batcher(batcher_t *b) {
     printf("Entering batcher, rem: %d, counter: %d, blocked: %d\n",
            b->remaining, b->counter, b->blocked);
 
+  assert(pthread_mutex_lock(&b->critsec) == 0);
+
   if (!CAS(&b->remaining, 0, 1)) {
-    assert(pthread_mutex_lock(&b->critsec) == 0);
     {
       atomic_fetch_add(&b->blocked, 1);
       pthread_cond_wait(&b->waiters, &b->critsec);
     }
-    assert(pthread_mutex_unlock(&b->critsec) == 0);
   }
+  assert(pthread_mutex_unlock(&b->critsec) == 0);
 }
 
 void epoch_cleanup(struct region_s *region) {
