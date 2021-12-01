@@ -8,6 +8,7 @@ grading/grading
 grade.sh
 perf.data*
 solution.zip
+submit.sh
 
 ### C ###
 # Prerequisites

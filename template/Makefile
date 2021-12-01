@@ -60,3 +60,6 @@ grade:
 
 perf:
 	cd .. && ./grade.sh perf
+
+submit:
+	cd .. && ./submit.sh
