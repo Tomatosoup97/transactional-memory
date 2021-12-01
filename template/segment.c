@@ -12,7 +12,7 @@
 void free_segment(segment_t *segment) { free(segment); }
 
 int alloc_segment(segment_t **segment, size_t align, size_t size, tx_t tx) {
-  if (DEBUG)
+  if (DEBUG1)
     printf("Allocating segment\n");
   size_t words_count = size / align;
   size_t fst_aligned = fst_aligned_offset(align);

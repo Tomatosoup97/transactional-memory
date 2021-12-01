@@ -61,5 +61,5 @@ grade:
 perf:
 	cd .. && ./grade.sh perf
 
-submit:
+submit: clean
 	cd .. && ./submit.sh

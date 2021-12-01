@@ -20,7 +20,7 @@
 static atomic_int trans_counter = 1;
 
 shared_t tm_create(size_t size, size_t align) {
-  if (DEBUG)
+  if (DEBUG1)
     printf("TM create, size: %ld, align: %ld\n", size, align);
   region_t *region = (region_t *)malloc(sizeof(region_t));
   batcher_t *batcher = (batcher_t *)malloc(sizeof(batcher_t));
@@ -50,7 +50,7 @@ shared_t tm_create(size_t size, size_t align) {
 }
 
 void tm_destroy(shared_t shared) {
-  if (DEBUG)
+  if (DEBUG1)
     printf("TM destroy\n");
   region_t *region = (region_t *)shared;
   link_t *link = region->seg_links->next;
@@ -60,7 +60,7 @@ void tm_destroy(shared_t shared) {
     link_t *next = link->next;
     segment_t *seg = link->seg;
 
-    if (DEBUG)
+    if (DEBUG1)
       printf("[%p] Freeing segment\n", seg);
 
     link_remove(&region->seg_links, &link, false, true);
@@ -99,7 +99,7 @@ tx_t tm_begin(shared_t shared, bool is_ro) {
   if (is_ro) {
     tx |= read_only_tx;
   }
-  if (DEBUG)
+  if (DEBUG1)
     printf("[%lx] TM begin\n", tx);
 
   enter_batcher(region->batcher);
@@ -107,7 +107,7 @@ tx_t tm_begin(shared_t shared, bool is_ro) {
 }
 
 bool tm_end(shared_t shared, tx_t tx as(unused)) {
-  if (DEBUG)
+  if (DEBUG1)
     printf("[%lx] TM end\n", tx);
   region_t *region = (region_t *)shared;
 
@@ -116,7 +116,7 @@ bool tm_end(shared_t shared, tx_t tx as(unused)) {
 }
 
 void rollback_transaction(region_t *region, tx_t tx) {
-  if (DEBUG)
+  if (DEBUG1)
     printf("[%lx] Rolling back transaction\n", tx);
 
   if (region->dirty_seg_links == NULL) {
@@ -192,7 +192,6 @@ bool _tm_read(region_t *region, tx_t tx, size_t size, void *target,
     uint64_t offset = 0;
 
     while (offset < size) {
-      // TODO: it can be a shared lock to improve perf
       spinlock_acquire(&seg->control[word_count].lock);
       bool success = can_read_word(tx, seg, word_count);
       spinlock_release(&seg->control[word_count].lock);
@@ -320,7 +319,7 @@ bool tm_write(shared_t shared, tx_t tx, void const *source, size_t size,
 }
 
 alloc_t tm_alloc(shared_t shared, tx_t tx, size_t size, void **target) {
-  if (DEBUG)
+  if (DEBUG1)
     printf("[%lx] TM alloc\n", tx);
   region_t *region = (region_t *)shared;
   segment_t *segment = NULL;
@@ -336,7 +335,7 @@ alloc_t tm_alloc(shared_t shared, tx_t tx, size_t size, void **target) {
 }
 
 bool tm_free(shared_t shared, tx_t tx, void *target) {
-  if (DEBUG)
+  if (DEBUG1)
     printf("[%lx] TM free\n", tx);
   region_t *region = (region_t *)shared;
   segment_t *seg = (segment_t *)get_opaque_ptr_seg(target);

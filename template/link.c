@@ -97,7 +97,8 @@ void link_append(link_t **base, link_t *link) {
 
 void link_remove(link_t **base, link_t **link, bool lock_taken, bool discard) {
   if (DEBUG)
-    printf("[%p] Removing link %p, lock: %d\n", (*link)->seg, (void *)*link, lock_taken);
+    printf("[%p] Removing link %p, lock: %d\n", (*link)->seg, (void *)*link,
+           lock_taken);
 
   bool is_last = (*link)->prev == (*link);
   bool is_base = (*link) == (*base);

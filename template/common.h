@@ -4,6 +4,7 @@
 #include <stdlib.h>
 
 #define DEBUG 0
+#define DEBUG1 0
 #define VERBOSE 0
 #define VERBOSE_V2 0
 #define OPT 1
